@@ -1,4 +1,4 @@
-# Strimzi-Kafka-Group-Authorizer
+# Kafka-Group-Authorizer
 
 A authorizer for Strimzi Kafka Operator that can configure ACLs for all users of the cluster with single ACL policy. 
 
@@ -15,7 +15,7 @@ kafka:
       superUsers:
         - CN=sre_user
     config:
-      strimzi.authorization.global-authorizer.allowed-listeners=loopback,canary
+      strimzi.authorization.global-authorizer.allowed-listeners=plain-9092,canary-9096
       strimzi.authorization.global-authorizer.acl.1: permission=allow;topic=foo;operations=read,write,create
       strimzi.authorization.global-authorizer.acl.2: permission=allow;topic=*;operations=read
       strimzi.authorization.global-authorizer.acl.3: permission=deny;group=xyz;operations=read,create      
