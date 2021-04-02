@@ -86,6 +86,8 @@ public class GlobalAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
             this.allowedListeners = Arrays.asList(listeners.split("\\s*,\\s*"));
         }
 
+        log.info("Allowed Custom Group Authorizer Listeners {}", this.allowedListeners);
+
         // read custom ACLs configured for rest of the users
         int i = 1;
         while(true) {
@@ -140,6 +142,7 @@ public class GlobalAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
                 acls.add(binding);
             };
         }
+        log.info("Custom Authorizer ACLs configured {}", this.aclMap);
     }
 
     @Override
@@ -150,18 +153,20 @@ public class GlobalAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
             if (authorized) {
                 results.add(AuthorizationResult.ALLOWED);
                 if (action.logIfAllowed()) {
-                    log.debug("user {} allowed for operation {} on resource {}",
+                    log.debug("user {} allowed for operation {} on resource {} using listener {}",
                             requestContext.principal().getName(),
                             action.operation(),
-                            action.resourcePattern().name());
+                            action.resourcePattern().name(),
+                            requestContext.listenerName());
                 }
             } else {
                 results.add(AuthorizationResult.DENIED);
                 if (action.logIfDenied()) {
-                    log.debug("user {} denied for operation {} on resource {}",
+                    log.debug("user {} denied for operation {} on resource {} using listener {}",
                             requestContext.principal().getName(),
                             action.operation(),
-                            action.resourcePattern().name());
+                            action.resourcePattern().name(),
+                            requestContext.listenerName());
                 }
             }
         });
@@ -204,10 +209,11 @@ public class GlobalAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
         // is super user allow any operation
         if (isSuperUser(requestContext.principal())) {
             if(log.isDebugEnabled()) {
-                log.debug("super.user {} allowed for operation {} on resource {}",
+                log.debug("super.user {} allowed for operation {} on resource {} using listener {}",
                         requestContext.principal().getName(),
                         action.operation(),
-                        action.resourcePattern().name());
+                        action.resourcePattern().name(),
+                        requestContext.listenerName());
             }
             return true;
         }
@@ -215,17 +221,21 @@ public class GlobalAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
         // if request made on any allowed listeners allow always
         if (isAllowedListener(requestContext.listenerName())) {
             if(log.isDebugEnabled()) {
-                log.debug("listener {} allowed for operation {} on resource {}",
+                log.debug("listener {} allowed for operation {} on resource {} using listener {}",
                         requestContext.listenerName(),
                         action.operation(),
-                        action.resourcePattern().name());
+                        action.resourcePattern().name(),
+                        requestContext.listenerName());
             }
             return true;
         }
 
         // for all other uses lets check the permission
         if(log.isDebugEnabled()) {
-            log.debug("User {} asking for permission {}",requestContext.principal().getName(), action.operation());
+            log.debug("User {} asking for permission {} using listener {}",
+                    requestContext.principal().getName(),
+                    action.operation(),
+                    requestContext.listenerName());
         }
 
         // super user actions are not cached.
@@ -276,9 +286,15 @@ public class GlobalAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
         return false;
     }
 
+    // openshift format PLAIN-9092://0.0.0.0:9092,OPEN-9093://0.0.0.0:9093,SRE-9096://0.0.0.0:9096
+    // minikube PLAIN-9092,OPEN-9093,SRE-9096
     public boolean isAllowedListener(String listener) {
         if (listener != null) {
-            return this.allowedListeners.contains(listener);
+            for (String str : this.allowedListeners) {
+                if (listener.startsWith(str)) {
+                    return true;
+                }
+            }
         }
         return false;
     }
