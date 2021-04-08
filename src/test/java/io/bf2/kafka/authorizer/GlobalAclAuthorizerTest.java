@@ -149,6 +149,10 @@ public class GlobalAclAuthorizerTest
         action = new Action(AclOperation.READ, new ResourcePattern(ResourceType.GROUP, "xyz", PatternType.LITERAL), 0, false, false);
         assertEquals(Arrays.asList(AuthorizationResult.ALLOWED), auth.authorize(rc, Arrays.asList(action)));
 
+        Mockito.when(rc.listenerName()).thenReturn("loop-9021://127.0.0.1:9021");
+        action = new Action(AclOperation.READ, new ResourcePattern(ResourceType.GROUP, "xyz", PatternType.LITERAL), 0, false, false);
+        assertEquals(Arrays.asList(AuthorizationResult.ALLOWED), auth.authorize(rc, Arrays.asList(action)));
+
         Mockito.when(rc.listenerName()).thenReturn("something");
         action = new Action(AclOperation.READ, new ResourcePattern(ResourceType.GROUP, "xyz", PatternType.LITERAL), 0, false, false);
         assertEquals(Arrays.asList(AuthorizationResult.DENIED), auth.authorize(rc, Arrays.asList(action)));
