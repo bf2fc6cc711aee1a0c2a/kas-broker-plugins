@@ -1,0 +1,60 @@
+user1 allowed read (allow-all PLAIN listener)
+    | permission=allow;principal=user1;topic=__private_topic1;operations=read,write
+    | user1
+    | READ
+    | FETCH
+    | TOPIC
+    | __private_topic1
+    | PLAIN-9092://127.0.0.1:9092
+    | ALLOWED
+    @
+user1 allowed read via external listener
+    | permission=allow;principal=user1;topic=__private_topic1;operations=read,write
+    | user1
+    | READ
+    | FETCH
+    | TOPIC
+    | __private_topic1
+    | EXTERNAL-9094://127.0.0.1:9094
+    | ALLOWED
+    @
+user1 denied describe via external listener
+    | permission=allow;principal=user1;topic=__private_topic1;operations=read,write
+    | user1
+    | DESCRIBE
+    | METADATA
+    | TOPIC
+    | __private_topic1
+    | EXTERNAL-9094://127.0.0.1:9094
+    | DENIED
+    @
+user1 allowed describe ListOffsets only
+    | permission=allow;principal=user1;topic=__private_topic1;operations=describe;apis=LIST_OFFSETS
+    | user1
+    | DESCRIBE
+    | LIST_OFFSETS
+    | TOPIC
+    | __private_topic1
+    | EXTERNAL-9094://127.0.0.1:9094
+    | ALLOWED
+    @
+user1 denied describe METADATA
+    | permission=allow;principal=user1;topic=__private_topic1;operations=describe;apis=LIST_OFFSETS
+    | user1
+    | DESCRIBE
+    | METADATA
+    | TOPIC
+    | __private_topic1
+    | EXTERNAL-9094://127.0.0.1:9094
+    | DENIED
+    @
+user2 denied by delegation to AclAuthorizer
+    | permission=allow;principal=user1;topic=__private_topic1;operations=read,write
+    | user2
+    | READ
+    | FETCH
+    | TOPIC
+    | __private_topic1
+    | EXTERNAL-9094://127.0.0.1:9094
+    | DENIED
+    @

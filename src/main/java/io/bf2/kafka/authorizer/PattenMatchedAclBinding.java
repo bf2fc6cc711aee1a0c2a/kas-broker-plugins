@@ -14,7 +14,7 @@ class PattenMatchedAclBinding extends AclBinding {
 
     private Pattern pattern;
 
-    public PattenMatchedAclBinding(ResourcePattern resource, AccessControlEntry entry) {
+    PattenMatchedAclBinding(ResourcePattern resource, AccessControlEntry entry) {
         super(resource, entry);
         String str = resource.name();
         if (str.equals("*")) {

@@ -1,0 +1,9 @@
+Nissing resource type configuration
+    | permission=allow;principal=user1;operations=read,write
+    @
+Invalid permission configuration
+    | permission=any;principal=user1;operations=read,write
+    @
+Invalid operation configuration
+    | permission=allow;principal=user1;operations=any
+    @

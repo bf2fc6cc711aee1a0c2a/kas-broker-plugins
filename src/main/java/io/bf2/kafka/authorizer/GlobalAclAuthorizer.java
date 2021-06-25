@@ -32,6 +32,7 @@ import java.util.StringTokenizer;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
 
+import com.google.common.base.Objects;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 
@@ -173,11 +174,11 @@ public class GlobalAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
         return results;
     }
 
-    private class CacheKey {
+    private static final class CacheKey {
         String name;
         AclOperation operation;
 
-        public CacheKey(Action action){
+        CacheKey(Action action){
             this.name = action.resourcePattern().name();
             this.operation = action.operation();
         }
@@ -193,14 +194,14 @@ public class GlobalAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
 
         @Override
         public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof CacheKey)) {
+                return false;
+            }
             CacheKey other = (CacheKey) obj;
-            if(!name.equals(other.name)) {
-                return false;
-            }
-            if (operation != other.operation) {
-                return false;
-            }
-            return true;
+            return Objects.equal(name, other.name) && Objects.equal(operation, other.operation);
         }
     }
 
@@ -263,16 +264,15 @@ public class GlobalAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
     }
 
     private Boolean allow(Action action, PattenMatchedAclBinding binding) {
+        Boolean allowed = null;
+
         if (binding.matches(action.resourcePattern().name())) {
             if (binding.entry().operation() == AclOperation.ALL || binding.entry().operation() == action.operation()) {
-                if (binding.entry().permissionType() == AclPermissionType.ALLOW) {
-                    return true;
-                } else {
-                    return false;
-                }
+                allowed = binding.entry().permissionType() == AclPermissionType.ALLOW;
             }
         }
-        return null;
+
+        return allowed;
     }
 
     @Override
