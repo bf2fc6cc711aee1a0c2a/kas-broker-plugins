@@ -223,6 +223,7 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
                 .filter(binding -> binding.matchesApiKey(requestContext.requestType()))
                 .filter(binding -> binding.matchesPrincipal(requestContext.principal()))
                 .filter(binding -> binding.matchesListener(requestContext.listenerName()))
+                .map(this::logCandidate)
                 .sorted(this::denyFirst)
                 .findFirst()
                 .map(binding -> resultFromBinding(requestContext, action, binding))
@@ -238,6 +239,13 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
         }
 
         return p1 == AclPermissionType.DENY ? -1 : 1;
+    }
+
+    AclBinding logCandidate(AclBinding binding) {
+        if (log.isDebugEnabled()) {
+            log.debug("Candidate ACL binding: {}", binding);
+        }
+        return binding;
     }
 
     AuthorizationResult resultFromBinding(AuthorizableRequestContext requestContext, Action action, AclBinding binding) {
@@ -256,7 +264,14 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
      * @return the result of the delegated authorization attempt or DENIED
      */
     AuthorizationResult delegateOrDeny(AuthorizableRequestContext requestContext, Action action) {
-        if (!integrationActive || hasPrincipalBindings(requestContext.principal().toString())) {
+        boolean principalConfigured = hasPrincipalBindings(requestContext.principal().toString());
+
+        if (log.isTraceEnabled()) {
+            log.trace("Default action: integrationActive={}, principalConfigured={}",
+                    integrationActive, principalConfigured);
+        }
+
+        if (!integrationActive || principalConfigured) {
             logAuditMessage(requestContext, action, false);
             return AuthorizationResult.DENIED;
         }

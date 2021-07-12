@@ -165,12 +165,14 @@ class CustomAclBinding extends AclBinding {
     }
 
     public boolean matchesPrincipal(KafkaPrincipal principal) {
-        if (this.principal.equals(principal)) {
-            return true;
-        }
+        return match(() -> {
+            if (!this.principal.getPrincipalType().equals(principal.getPrincipalType())) {
+                return false;
+            }
 
-        return WILDCARD.equals(this.principal.getName())
-                && this.principal.getPrincipalType().equals(principal.getPrincipalType());
+            return Arrays.asList(principal.getName(), WILDCARD)
+                    .contains(this.principal.getName());
+        }, PRINCIPAL, this.principal, principal);
     }
 
     public boolean isPrincipalSpecified() {
@@ -193,8 +195,12 @@ class CustomAclBinding extends AclBinding {
     boolean match(BooleanSupplier matcher, String fieldName, Object bindingValue, Object requestValue) {
         boolean matches = matcher.getAsBoolean();
 
-        if (log.isTraceEnabled() && !matches) {
-            log.trace("Binding attribute {} value `{}` does not match request value `{}`", fieldName, bindingValue, requestValue);
+        if (log.isTraceEnabled()) {
+            if (matches) {
+                log.trace("Binding attribute {} value `{}` matches request value `{}`", fieldName, bindingValue, requestValue);
+            } else {
+                log.trace("Binding attribute {} value `{}` does not match request value `{}`", fieldName, bindingValue, requestValue);
+            }
         }
 
         return matches;
@@ -208,5 +214,13 @@ class CustomAclBinding extends AclBinding {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), apiKeys);
+    }
+
+    @Override
+    public String toString() {
+        return "(pattern=" + super.pattern() +
+                ", entry=" + super.entry() +
+                ", listenerPattern=" + listenerPattern.pattern() +
+                ", apiKeys=" + apiKeys + ")";
     }
 }
