@@ -12,8 +12,10 @@ import org.apache.kafka.common.acl.AclBinding;
 import org.apache.kafka.common.acl.AclBindingFilter;
 import org.apache.kafka.common.acl.AclPermissionType;
 import org.apache.kafka.common.errors.ApiException;
+import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.resource.ResourceType;
+import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.SecurityUtils;
 import org.apache.kafka.server.authorizer.AclCreateResult;
 import org.apache.kafka.server.authorizer.AclDeleteResult;
@@ -264,7 +266,7 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
      * @return the result of the delegated authorization attempt or DENIED
      */
     AuthorizationResult delegateOrDeny(AuthorizableRequestContext requestContext, Action action) {
-        boolean principalConfigured = hasPrincipalBindings(requestContext.principal().toString());
+        boolean principalConfigured = hasPrincipalBindings(toString(requestContext.principal()));
 
         if (log.isTraceEnabled()) {
             log.trace("Default action: integrationActive={}, principalConfigured={}",
@@ -281,6 +283,10 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
 
     boolean hasPrincipalBindings(String principalName) {
         return aclPrincipals.contains(principalName);
+    }
+
+    static String toString(KafkaPrincipal principal) {
+        return principal.getPrincipalType() + ":" + principal.getName();
     }
 
     // openshift format PLAIN-9092://0.0.0.0:9092,OPEN-9093://0.0.0.0:9093,SRE-9096://0.0.0.0:9096
@@ -361,7 +367,7 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
                             requestContext.principal().getName(),
                             binding.entry().principal());
                     result = errorResult(AclCreateResult::new, CREATE_ACL_INVALID_PRINCIPAL);
-                } else if (Objects.equals(requestContext.principal().toString(), binding.entry().principal())) {
+                } else if (Objects.equals(toString(requestContext.principal()), binding.entry().principal())) {
                     /* Reject ACL operations as invalid where the principal named in the ACL binding is the principal performing the operation */
                     log.info("Rejected attempt by user {} to self-assign ACL binding",
                             requestContext.principal().getName());
@@ -404,7 +410,7 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
     }
 
     <T> CompletionStage<T> errorResult(Function<ApiException, T> resultBuilder, String message) {
-        ApiException exception = new ApiException(message);
+        ApiException exception = new InvalidRequestException(message);
         return CompletableFuture.completedFuture(resultBuilder.apply(exception));
     }
 
