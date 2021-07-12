@@ -28,11 +28,11 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.StringTokenizer;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
 
-import com.google.common.base.Objects;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 
@@ -201,7 +201,7 @@ public class GlobalAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
                 return false;
             }
             CacheKey other = (CacheKey) obj;
-            return Objects.equal(name, other.name) && Objects.equal(operation, other.operation);
+            return Objects.equals(name, other.name) && Objects.equals(operation, other.operation);
         }
     }
 
