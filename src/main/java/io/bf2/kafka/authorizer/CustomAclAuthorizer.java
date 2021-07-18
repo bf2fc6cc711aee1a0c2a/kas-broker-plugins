@@ -1,5 +1,4 @@
 /*
- * Copyright Strimzi authors.
  * License: Apache License 2.0 (see the file LICENSE or http://apache.org/licenses/LICENSE-2.0.html).
  */
 package io.bf2.kafka.authorizer;
@@ -8,6 +7,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kafka.security.authorizer.AclEntry;
+import org.apache.kafka.common.Endpoint;
 import org.apache.kafka.common.acl.AclBinding;
 import org.apache.kafka.common.acl.AclBindingFilter;
 import org.apache.kafka.common.acl.AclPermissionType;
@@ -22,9 +22,12 @@ import org.apache.kafka.server.authorizer.AclDeleteResult;
 import org.apache.kafka.server.authorizer.Action;
 import org.apache.kafka.server.authorizer.AuthorizableRequestContext;
 import org.apache.kafka.server.authorizer.AuthorizationResult;
+import org.apache.kafka.server.authorizer.Authorizer;
+import org.apache.kafka.server.authorizer.AuthorizerServerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.math.BigInteger;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -53,7 +56,7 @@ import java.util.stream.Collectors;
  * supported permissions are "allow" and "deny"
  * supported operations are "all,read,write,delete,create,describe,alter,cluster_action,describe_configs,alter_configs"
  */
-public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer {
+public class CustomAclAuthorizer implements Authorizer {
 
     private static final Logger log = LoggerFactory.getLogger(CustomAclAuthorizer.class);
 
@@ -74,6 +77,7 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
     @Deprecated(forRemoval = true)
     static final String ALLOWED_LISTENERS = CONFIG_PREFIX + "allowed-listeners";
     static final String ACL_PREFIX = CONFIG_PREFIX + "acl.";
+    static final Pattern ACL_PATTERN = Pattern.compile(Pattern.quote(ACL_PREFIX) + "\\d+");
     static final String INTEGRATION_ACTIVE = CONFIG_PREFIX + "integration-active";
 
     static final Map<AclPermissionType, AuthorizationResult> permissionResults = Map.ofEntries(
@@ -98,13 +102,28 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
      */
     boolean integrationActive;
 
+    final kafka.security.authorizer.AclAuthorizer delegate;
+
+    public CustomAclAuthorizer(kafka.security.authorizer.AclAuthorizer delegate) {
+        this.delegate = delegate;
+    }
+
+    public CustomAclAuthorizer() {
+        this(new kafka.security.authorizer.AclAuthorizer());
+    }
+
+    @Override
+    public Map<Endpoint, ? extends CompletionStage<Void>> start(AuthorizerServerInfo serverInfo) {
+        return delegate.start(serverInfo);
+    }
+
     @Override
     public void configure(Map<String, ?> configs) {
         Object integrate = Optional.<Object>ofNullable(configs.get(INTEGRATION_ACTIVE)).orElse("true");
 
         if (Boolean.parseBoolean(integrate.toString())) {
             integrationActive = true;
-            super.configure(configs);
+            delegate.configure(configs);
         }
 
         addAllowedListeners(configs);
@@ -121,14 +140,13 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
         }
 
         log.info("Allowed Custom Group Authorizer Listeners {}", this.allowedListeners);
-        Pattern aclConfig = Pattern.compile(Pattern.quote(ACL_PREFIX) + "\\d+");
 
         // read custom ACLs configured for rest of the users
         configs.entrySet()
             .stream()
-            .filter(config -> aclConfig.matcher(config.getKey()).matches())
+            .filter(config -> ACL_PATTERN.matcher(config.getKey()).matches())
             // Order significant for unit test
-            .sorted((c1, c2) -> Integer.compare(parseAclSequence(c1), parseAclSequence(c2)))
+            .sorted((c1, c2) -> parseAclSequence(c1).compareTo(parseAclSequence(c2)))
             .map(Map.Entry::getValue)
             .filter(String.class::isInstance)
             .map(String.class::cast)
@@ -172,9 +190,10 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
         }
     }
 
-    int parseAclSequence(Map.Entry<String, ?> config) {
+    BigInteger parseAclSequence(Map.Entry<String, ?> config) {
         String key = config.getKey();
-        return Integer.parseInt(key.substring(key.lastIndexOf('.') + 1));
+        String integerComponent = key.substring(key.lastIndexOf('.') + 1);
+        return new BigInteger(integerComponent);
     }
 
     @Override
@@ -187,7 +206,7 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
     private AuthorizationResult authorizeAction(AuthorizableRequestContext requestContext, Action action) {
 
         // is super user allow any operation
-        if (isSuperUser(requestContext.principal())) {
+        if (integrationActive && delegate.isSuperUser(requestContext.principal())) {
             if (log.isDebugEnabled()) {
                 log.debug("super.user {} allowed for operation {} on resource {} using listener {}",
                         requestContext.principal().getName(),
@@ -278,7 +297,7 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
             return AuthorizationResult.DENIED;
         }
         // Indeterminate result - delegate to default ACL handling
-        return super.authorize(requestContext, List.of(action)).get(0);
+        return delegate.authorize(requestContext, List.of(action)).get(0);
     }
 
     boolean hasPrincipalBindings(String principalName) {
@@ -295,7 +314,6 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
         return allowedListeners.stream().anyMatch(listener::startsWith);
     }
 
-    @Override
     public void logAuditMessage(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
         if (authorized && action.logIfAllowed()) {
             if (log.isDebugEnabled()) {
@@ -386,7 +404,7 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
                     result = errorResult(AclCreateResult::new, CREATE_ACL_INVALID_BINDING);
                 } else {
                     log.debug("Delegating createAcls to parent");
-                    result = super.createAcls(requestContext, List.of(binding)).get(0);
+                    result = delegate.createAcls(requestContext, List.of(binding)).get(0);
                 }
 
                 return result;
@@ -406,7 +424,7 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
                     .collect(Collectors.toList());
         }
 
-        return super.deleteAcls(requestContext, aclBindingFilters);
+        return delegate.deleteAcls(requestContext, aclBindingFilters);
     }
 
     <T> CompletionStage<T> errorResult(Function<ApiException, T> resultBuilder, String message) {
@@ -416,13 +434,13 @@ public class CustomAclAuthorizer extends kafka.security.authorizer.AclAuthorizer
 
     @Override
     public Iterable<AclBinding> acls(AclBindingFilter filter) {
-        return integrationActive ? super.acls(filter) : Collections.emptyList();
+        return integrationActive ? delegate.acls(filter) : Collections.emptyList();
     }
 
     @Override
     public void close() {
         if (integrationActive) {
-            super.close();
+            delegate.close();
         }
     }
 }
