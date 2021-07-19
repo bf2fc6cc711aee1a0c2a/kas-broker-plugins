@@ -3,7 +3,6 @@
  */
 package io.bf2.kafka.authorizer;
 
-import kafka.security.authorizer.AclAuthorizer;
 import org.apache.kafka.common.acl.AccessControlEntry;
 import org.apache.kafka.common.acl.AclBinding;
 import org.apache.kafka.common.acl.AclBindingFilter;
@@ -15,12 +14,13 @@ import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.resource.ResourcePattern;
 import org.apache.kafka.common.resource.ResourceType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
+import org.apache.kafka.common.utils.SecurityUtils;
 import org.apache.kafka.server.authorizer.AclCreateResult;
-import org.apache.kafka.server.authorizer.AclDeleteResult;
 import org.apache.kafka.server.authorizer.Action;
 import org.apache.kafka.server.authorizer.AuthorizableRequestContext;
 import org.apache.kafka.server.authorizer.AuthorizationResult;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -28,7 +28,9 @@ import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -37,30 +39,47 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class CustomAclAuthorizerTest {
 
     static Map<String, Object> config;
+    kafka.security.authorizer.AclAuthorizer delegate;
 
     @BeforeAll
-    static void setup() throws IOException {
+    static void initialize() throws IOException {
         config = ConfigHelper.getConfig(CustomAclAuthorizerTest.class);
     }
 
+    @BeforeEach
+    void setup() {
+        this.delegate = Mockito.mock(kafka.security.authorizer.AclAuthorizer.class);
+
+        Mockito.when(this.delegate.authorize(Mockito.any(AuthorizableRequestContext.class), Mockito.anyListOf(Action.class)))
+            .thenAnswer(invocation -> {
+                int count = invocation.getArgumentAt(1, List.class).size();
+                List<AuthorizationResult> results = new ArrayList<>(count);
+                for (int i = 0; i < count; i++) {
+                    results.add(AuthorizationResult.DENIED);
+                }
+                return results;
+            });
+
+        Mockito.when(this.delegate.acls(Mockito.any(AclBindingFilter.class)))
+            .thenReturn(Collections.emptyList());
+    }
+
     @Test
-    void testConfigureTallyLoaded() {
+    void testConfigureTallyLoaded() throws IOException {
         /*
          * Verifies that the operations are unwrapped to create individual ACL records and that
          * there are no equals/hashCode collisions.
          */
-        try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
             auth.configure(config);
 
             Set<CustomAclBinding> uniqueBindings = auth.aclMap.values()
@@ -69,6 +88,7 @@ class CustomAclAuthorizerTest {
                 .collect(Collectors.toCollection(HashSet::new));
 
             assertEquals(20, uniqueBindings.size());
+            assertEquals(1, auth.defaultBindings.size());
         }
     }
 
@@ -88,11 +108,11 @@ class CustomAclAuthorizerTest {
             String expResourceName,
             AclOperation expOperation,
             String expListener,
-            String expPrincipalName) {
+            String expPrincipalName) throws IOException {
 
         KafkaPrincipal expPrincipal = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, expPrincipalName);
 
-        try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
             auth.configure(config);
 
             List<CustomAclBinding> matchedBindings = auth.aclMap.get(expResourceType)
@@ -112,8 +132,8 @@ class CustomAclAuthorizerTest {
 
     @SuppressWarnings("removal")
     @Test
-    void testConfigureAllowedListeners() {
-        try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
+    void testConfigureAllowedListeners() throws IOException {
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
             auth.configure(config);
 
             assertEquals(2, auth.allowedListeners.size());
@@ -132,11 +152,11 @@ class CustomAclAuthorizerTest {
         "Test user `any` ALLOWED WRITE TOPIC `abc` on external listener,  User:any,   external-9024://127.0.0.1:9024, WRITE,  TOPIC,   abc, ALLOWED",
         "Test user `any` DENIED READ GROUP `xyz` on external listener,    User:any,   external-9024://127.0.0.1:9024, READ,   GROUP,   xyz, DENIED",
         "Test user `any` DENIED READ CLUSTER `xyz` on external listener,  User:any,   external-9024://127.0.0.1:9024, READ,   CLUSTER, xyz, DENIED",
-        // TODO: Consider concept of super users and when to delegate (before or after custom ACL check)
-        //"Test user `admin` ALLOWED READ GROUP `xyz` on external listener, User:admin, external-9024://127.0.0.1:9024, READ,   GROUP,   xyz, ALLOWED",
-        "Test user `any` ALLOWED READ GROUP `xyz` on loop listener,       User:any,   loop,                           READ,   GROUP,   xyz, ALLOWED",
-        "Test user `any` ALLOWED READ GROUP `xyz` on full loop listener,  User:any,   loop-9021://127.0.0.1:9021,     READ,   GROUP,   xyz, ALLOWED",
-        "Test user `any` DENIED READ GROUP `xyz` on something listener,   User:any,   something,                      READ,   GROUP,   xyz, DENIED",
+        "Test user `admin` ALLOWED READ GROUP `xyz` on external listener, User:admin, external-9024://127.0.0.1:9024, READ,   GROUP,   xyz, ALLOWED",
+        "Test user `any` ALLOWED READ GROUP `abc` on loop listener,       User:any,   loop,                           READ,   GROUP,   abc, ALLOWED",
+        "Test user `any` ALLOWED READ GROUP `abc` on full loop listener,  User:any,   loop-9021://127.0.0.1:9021,     READ,   GROUP,   abc, ALLOWED",
+        "Test user `any` DENIED READ GROUP `abc` on something listener,   User:any,   something,                      READ,   GROUP,   abc, DENIED",
+        "Test user `any` ALLOWED WRITE TOPIC `pub` on something listener, User:any,   something,                      WRITE,  TOPIC,   pub, ALLOWED",
     })
     void testAuthorize(String title,
             String principal,
@@ -144,16 +164,12 @@ class CustomAclAuthorizerTest {
             AclOperation operation,
             ResourceType resourceType,
             String resourceName,
-            AuthorizationResult expectedResult) {
+            AuthorizationResult expectedResult) throws IOException {
 
-        class AdminSuperUserAclAuthorizer extends AclAuthorizer {
-            @Override
-            public boolean isSuperUser(KafkaPrincipal principal) {
-                return principal.getName().equals("admin");
-            }
-        }
+        KafkaPrincipal superUser = SecurityUtils.parseKafkaPrincipal("User:admin");
+        Mockito.when(this.delegate.isSuperUser(superUser)).thenReturn(Boolean.TRUE);
 
-        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(new AdminSuperUserAclAuthorizer())) {
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
             auth.configure(config);
 
             String[] principalComponents = principal.split(":");
@@ -170,34 +186,14 @@ class CustomAclAuthorizerTest {
         }
     }
 
-    @Test
-    void testCreateAclsDisabledWithoutIntegration() {
-        List<AclBinding> bindings = Arrays.asList(mock(AclBinding.class), mock(AclBinding.class));
-        List<CompletionStage<AclCreateResult>> results;
-
-        try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
-            auth.configure(config);
-            results = auth.createAcls(mock(AuthorizableRequestContext.class), bindings);
-            assertEquals(2, results.size());
-
-            assertTrue(results.stream()
-                .map(CompletionStage::toCompletableFuture)
-                .map(CompletableFuture::join)
-                .map(AclCreateResult::exception)
-                .map(Optional::get)
-                .allMatch(e -> e instanceof ApiException
-                        && CustomAclAuthorizer.CREATE_ACL_NOT_SUPPORTED.equals(e.getMessage())));
-        }
-    }
-
     @ParameterizedTest
     @CsvSource({
         "Denied for principal missing 'User:' prefix, user2",
         "Denied for principal in static configuration, User:anonymous",
         "Denied for principal being the requestor, User:owner1"
     })
-    void testCreateAclsDeniedForInvalidPrincipal(String title, String principal) {
-        try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
+    void testCreateAclsDeniedForInvalidPrincipal(String title, String principal) throws IOException {
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
             auth.configure(config);
 
             AuthorizableRequestContext rc = Mockito.mock(AuthorizableRequestContext.class);
@@ -214,9 +210,6 @@ class CustomAclAuthorizerTest {
                     new AccessControlEntry(principal, "*", AclOperation.WRITE, AclPermissionType.ALLOW));
 
             var bindings = List.of(readUser1Topics, writeUser1Topics);
-
-            // "Fake" integration to trigger validation
-            auth.integrationActive = true;
             var results = auth.createAcls(rc, bindings);
 
             assertEquals(2, results.size());
@@ -231,8 +224,8 @@ class CustomAclAuthorizerTest {
     }
 
     @Test
-    void testCreateAclsDeniedForInvalidBinding() {
-        try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
+    void testCreateAclsDeniedForInvalidBinding() throws IOException {
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
             auth.configure(config);
 
             AuthorizableRequestContext rc = Mockito.mock(AuthorizableRequestContext.class);
@@ -252,9 +245,6 @@ class CustomAclAuthorizerTest {
                     new AccessControlEntry("User:user1", "*", AclOperation.DESCRIBE, AclPermissionType.ALLOW));
 
             var bindings = List.of(readUser1Topics, writeUser1Topics, describleAllDelegationTokens);
-
-            // "Fake" integration to trigger validation
-            auth.integrationActive = true;
             var results = auth.createAcls(rc, bindings);
 
             assertEquals(3, results.size());
@@ -268,36 +258,4 @@ class CustomAclAuthorizerTest {
         }
     }
 
-    @Test
-    void testDeleteAclsDisabledWithoutIntegration() {
-        List<AclBindingFilter> filters = Arrays.asList(mock(AclBindingFilter.class), mock(AclBindingFilter.class));
-        List<? extends CompletionStage<AclDeleteResult>> results;
-
-        try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
-            auth.configure(config);
-            results = auth.deleteAcls(mock(AuthorizableRequestContext.class), filters);
-            assertEquals(2, results.size());
-
-            assertTrue(results.stream()
-                .map(CompletionStage::toCompletableFuture)
-                .map(CompletableFuture::join)
-                .map(AclDeleteResult::exception)
-                .map(Optional::get)
-                .allMatch(e -> e instanceof ApiException
-                        && CustomAclAuthorizer.DELETE_ACL_NOT_SUPPORTED.equals(e.getMessage())));
-        }
-    }
-
-    @Test
-    void testListAclsEmptyWithoutIntegration() {
-        Iterable<AclBinding> results;
-
-        try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
-            auth.configure(config);
-            results = auth.acls(mock(AclBindingFilter.class));
-
-            List<AclBinding> collected = StreamSupport.stream(results.spliterator(), false).collect(Collectors.toList());
-            assertEquals(0, collected.size());
-        }
-    }
 }

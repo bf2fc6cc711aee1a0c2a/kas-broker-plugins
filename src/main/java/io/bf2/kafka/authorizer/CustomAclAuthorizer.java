@@ -8,12 +8,16 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kafka.security.authorizer.AclEntry;
 import org.apache.kafka.common.Endpoint;
+import org.apache.kafka.common.acl.AccessControlEntryFilter;
 import org.apache.kafka.common.acl.AclBinding;
 import org.apache.kafka.common.acl.AclBindingFilter;
+import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.acl.AclPermissionType;
 import org.apache.kafka.common.errors.ApiException;
 import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.protocol.ApiKeys;
+import org.apache.kafka.common.resource.PatternType;
+import org.apache.kafka.common.resource.ResourcePatternFilter;
 import org.apache.kafka.common.resource.ResourceType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.SecurityUtils;
@@ -27,6 +31,7 @@ import org.apache.kafka.server.authorizer.AuthorizerServerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.math.BigInteger;
 import java.security.Principal;
 import java.util.ArrayList;
@@ -47,28 +52,47 @@ import java.util.stream.Collectors;
 
 /**
  * A authorizer for Kafka that defines custom ACLs. The configuration is provided as
+ * a string a semicolon-delimited key/value pairs to specify
+ *
+ * <ol>
+ * <li><code>permission</code> - either <code>allow</code> or <code>deny</code>.
+ *   If not specified, defaults to <code>allow</code>.
+ * <li><code>principal</code> - may be either a principal name or wildcard <code>*</code>,
+ *   indicating the user(s) for which the ACL is applicable. If not specified,
+ *   defaults to <code>*</code> and the ACL applies to all users.
+ * <li>resource - a key/value pair where the key is one of the enumerated resource
+ *   types (see {@link ResourceType}) and the value is the resource name. A wildcard
+ *   <code>*</code> may be used to match any resource of the associated type.
+ * <li><code>operations</code> - comma-delimited list of operations for the
+ *   ACL binding. See {@link AclOperation} for the enumeration names. <em>Required</em>
+ * <li><code>apis</code> - comma-delimited list of APIs to further focus the ACL
+ *   binding. See {@link ApiKeys} for the enumeration names.
+ * <li><code>listeners</code> - a regular expression used to match the listener
+ *   name used to make a request. If specified, the ACL will only be used with
+ *   requests made via a matching listener.
+ * </ol>
+ *
+ * Examples:
  * <pre>
- * acl.1: permission=allow;topic=foo;operations=read,write,create
+ * acl.1: permission=allow;principal=admin;topic=foo;operations=read,write,create
  * acl.2: permission=allow;topic=bar;operations=read
- * acl.3: permission=deny;group=xyz;operations=read,create
+ * acl.3: permission=deny;listener=internal.*;group=xyz;operations=read,create
  * </pre>
- * supported resource types are "topic, group, cluster, transaction_id, deletegation_token"
- * supported permissions are "allow" and "deny"
- * supported operations are "all,read,write,delete,create,describe,alter,cluster_action,describe_configs,alter_configs"
  */
 public class CustomAclAuthorizer implements Authorizer {
 
     private static final Logger log = LoggerFactory.getLogger(CustomAclAuthorizer.class);
 
-    static final String CREATE_ACL_NOT_SUPPORTED = "ACL creation not supported";
     static final String CREATE_ACL_INVALID_PRINCIPAL = "Invalid ACL principal name";
     static final String CREATE_ACL_INVALID_BINDING = "Invalid ACL resource or operation";
 
-    static final String DELETE_ACL_NOT_SUPPORTED = "ACL deletion is not supported";
-
-    static final String CONFIG_PREFIX = "strimzi.authorization.global-authorizer.";
-
+    static final String CONFIG_PREFIX = "strimzi.authorization.custom-authorizer.";
     static final String ALLOWED_ACLS = CONFIG_PREFIX + "allowed-acls";
+
+    static final ResourcePatternFilter ANY_RESOURCE = new ResourcePatternFilter(ResourceType.ANY, null, PatternType.ANY);
+    static final AccessControlEntryFilter ANY_ENTRY = new AccessControlEntryFilter(null, null, AclOperation.ANY, AclPermissionType.ANY);
+    static final AclBindingFilter ANY_ACL = new AclBindingFilter(ANY_RESOURCE, ANY_ENTRY);
+
     /**
      * For backward-compatibility with {@link GlobalAclAuthorizer}.
      *
@@ -78,13 +102,13 @@ public class CustomAclAuthorizer implements Authorizer {
     static final String ALLOWED_LISTENERS = CONFIG_PREFIX + "allowed-listeners";
     static final String ACL_PREFIX = CONFIG_PREFIX + "acl.";
     static final Pattern ACL_PATTERN = Pattern.compile(Pattern.quote(ACL_PREFIX) + "\\d+");
-    static final String INTEGRATION_ACTIVE = CONFIG_PREFIX + "integration-active";
 
     static final Map<AclPermissionType, AuthorizationResult> permissionResults = Map.ofEntries(
             Map.entry(AclPermissionType.ALLOW, AuthorizationResult.ALLOWED),
             Map.entry(AclPermissionType.DENY, AuthorizationResult.DENIED));
 
     final Map<ResourceType, List<CustomAclBinding>> aclMap = new EnumMap<>(ResourceType.class);
+    final List<CustomAclBinding> defaultBindings = new ArrayList<>();
     final Map<String, List<String>> allowedAcls = new HashMap<>();
     final Set<String> aclPrincipals = new HashSet<>();
 
@@ -95,12 +119,6 @@ public class CustomAclAuthorizer implements Authorizer {
      */
     @Deprecated(forRemoval = true)
     final Set<String> allowedListeners = new HashSet<>();
-
-    /**
-     * Used for testing. Indicates whether integration with ZooKeeper (via the super class) is enabled.
-     * Integration may be disabled for unit testing.
-     */
-    boolean integrationActive;
 
     final kafka.security.authorizer.AclAuthorizer delegate;
 
@@ -119,12 +137,7 @@ public class CustomAclAuthorizer implements Authorizer {
 
     @Override
     public void configure(Map<String, ?> configs) {
-        Object integrate = Optional.<Object>ofNullable(configs.get(INTEGRATION_ACTIVE)).orElse("true");
-
-        if (Boolean.parseBoolean(integrate.toString())) {
-            integrationActive = true;
-            delegate.configure(configs);
-        }
+        delegate.configure(configs);
 
         addAllowedListeners(configs);
 
@@ -153,13 +166,18 @@ public class CustomAclAuthorizer implements Authorizer {
             .map(CustomAclBinding::valueOf)
             .flatMap(List::stream)
             .forEach(binding -> {
-                aclMap.compute(binding.pattern().resourceType(), (k, v) -> {
-                    List<CustomAclBinding> bindings = Objects.requireNonNullElseGet(v, ArrayList::new);
-                    bindings.add(binding);
-                    return bindings;
-                });
-                if (binding.isPrincipalSpecified()) {
-                    aclPrincipals.add(binding.entry().principal());
+                if (binding.isDefaultBinding()) {
+                    defaultBindings.add(binding);
+                } else {
+                    aclMap.compute(binding.pattern().resourceType(), (k, v) -> {
+                        List<CustomAclBinding> bindings = Objects.requireNonNullElseGet(v, ArrayList::new);
+                        bindings.add(binding);
+                        return bindings;
+                    });
+
+                    if (binding.isPrincipalSpecified()) {
+                        aclPrincipals.add(binding.entry().principal());
+                    }
                 }
             });
 
@@ -204,9 +222,8 @@ public class CustomAclAuthorizer implements Authorizer {
     }
 
     private AuthorizationResult authorizeAction(AuthorizableRequestContext requestContext, Action action) {
-
         // is super user allow any operation
-        if (integrationActive && delegate.isSuperUser(requestContext.principal())) {
+        if (delegate.isSuperUser(requestContext.principal())) {
             if (log.isDebugEnabled()) {
                 log.debug("super.user {} allowed for operation {} on resource {} using listener {}",
                         requestContext.principal().getName(),
@@ -217,19 +234,6 @@ public class CustomAclAuthorizer implements Authorizer {
             return AuthorizationResult.ALLOWED;
         }
 
-        // if request made on any allowed listeners allow always
-        if (isAllowedListener(requestContext.listenerName())) {
-            if (log.isDebugEnabled()) {
-                log.debug("listener {} allowed for operation {} on resource {} using listener {}",
-                        requestContext.listenerName(),
-                        action.operation(),
-                        action.resourcePattern().name(),
-                        requestContext.listenerName());
-            }
-            return AuthorizationResult.ALLOWED;
-        }
-
-        // for all other uses lets check the permission
         if (log.isDebugEnabled()) {
             log.debug("User {} asking for permission {} using listener {}",
                     requestContext.principal().getName(),
@@ -237,17 +241,10 @@ public class CustomAclAuthorizer implements Authorizer {
                     requestContext.listenerName());
         }
 
-        return aclMap.getOrDefault(action.resourcePattern().resourceType(), Collections.emptyList())
-                .stream()
-                .filter(binding -> binding.matchesResource(action.resourcePattern().name()))
-                .filter(binding -> binding.matchesOperation(action.operation()))
-                .filter(binding -> binding.matchesApiKey(requestContext.requestType()))
-                .filter(binding -> binding.matchesPrincipal(requestContext.principal()))
-                .filter(binding -> binding.matchesListener(requestContext.listenerName()))
-                .map(this::logCandidate)
-                .sorted(this::denyFirst)
-                .findFirst()
-                .map(binding -> resultFromBinding(requestContext, action, binding))
+        List<CustomAclBinding> bindings =
+                aclMap.getOrDefault(action.resourcePattern().resourceType(), Collections.emptyList());
+
+        return fetchAuthorization(requestContext, action, bindings)
                 .orElseGet(() -> delegateOrDeny(requestContext, action));
     }
 
@@ -288,16 +285,54 @@ public class CustomAclAuthorizer implements Authorizer {
         boolean principalConfigured = hasPrincipalBindings(toString(requestContext.principal()));
 
         if (log.isTraceEnabled()) {
-            log.trace("Default action: integrationActive={}, principalConfigured={}",
-                    integrationActive, principalConfigured);
+            log.trace("Default action: principalConfigured={}", principalConfigured);
         }
 
-        if (!integrationActive || principalConfigured) {
+        if (principalConfigured) {
             logAuditMessage(requestContext, action, false);
             return AuthorizationResult.DENIED;
         }
+
+        if (!defaultBindings.isEmpty() && !delegate.acls(ANY_ACL).iterator().hasNext()) {
+            if (log.isDebugEnabled()) {
+                log.debug("Kafka ACLs not configured - non-empty default binding list will be considered");
+            }
+
+            Optional<AuthorizationResult> defaultResult =
+                    fetchAuthorization(requestContext, action, defaultBindings);
+
+            if (defaultResult.isPresent()) {
+                return defaultResult.get();
+            }
+        }
+
+        // if request made on any allowed listeners allow always
+        if (isAllowedListener(requestContext.listenerName())) {
+            if (log.isDebugEnabled()) {
+                log.debug("listener {} allowed for operation {} on resource {} using listener {}",
+                        requestContext.listenerName(),
+                        action.operation(),
+                        action.resourcePattern().name(),
+                        requestContext.listenerName());
+            }
+            return AuthorizationResult.ALLOWED;
+        }
+
         // Indeterminate result - delegate to default ACL handling
         return delegate.authorize(requestContext, List.of(action)).get(0);
+    }
+
+    Optional<AuthorizationResult> fetchAuthorization(AuthorizableRequestContext requestContext, Action action, List<CustomAclBinding> bindings) {
+        return bindings.stream()
+                .filter(binding -> binding.matchesResource(action.resourcePattern().name()))
+                .filter(binding -> binding.matchesOperation(action.operation()))
+                .filter(binding -> binding.matchesApiKey(requestContext.requestType()))
+                .filter(binding -> binding.matchesPrincipal(requestContext.principal()))
+                .filter(binding -> binding.matchesListener(requestContext.listenerName()))
+                .map(this::logCandidate)
+                .sorted(this::denyFirst)
+                .findFirst()
+                .map(binding -> resultFromBinding(requestContext, action, binding));
     }
 
     boolean hasPrincipalBindings(String principalName) {
@@ -376,10 +411,7 @@ public class CustomAclAuthorizer implements Authorizer {
             .map(binding -> {
                 final CompletionStage<AclCreateResult> result;
 
-                if (!integrationActive) {
-                    log.debug("Integration disabled, ACL creation not allowed");
-                    result = errorResult(AclCreateResult::new, CREATE_ACL_NOT_SUPPORTED);
-                } else if (!binding.entry().principal().startsWith(CustomAclBinding.USER_TYPE_PREFIX)) {
+                if (!binding.entry().principal().startsWith(CustomAclBinding.USER_TYPE_PREFIX)) {
                     /* Reject ACL operations as invalid where the principal named in the ACL binding is the principal performing the operation */
                     log.info("Rejected attempt by user {} to create ACL binding with invalid principal name: {}",
                             requestContext.principal().getName(),
@@ -416,14 +448,6 @@ public class CustomAclAuthorizer implements Authorizer {
     public List<? extends CompletionStage<AclDeleteResult>> deleteAcls(AuthorizableRequestContext requestContext,
             List<AclBindingFilter> aclBindingFilters) {
 
-        if (!integrationActive) {
-            log.debug("Integration disabled, ACL deletion not allowed");
-
-            return aclBindingFilters.stream()
-                    .map(filter -> errorResult(AclDeleteResult::new, DELETE_ACL_NOT_SUPPORTED))
-                    .collect(Collectors.toList());
-        }
-
         return delegate.deleteAcls(requestContext, aclBindingFilters);
     }
 
@@ -434,13 +458,11 @@ public class CustomAclAuthorizer implements Authorizer {
 
     @Override
     public Iterable<AclBinding> acls(AclBindingFilter filter) {
-        return integrationActive ? delegate.acls(filter) : Collections.emptyList();
+        return delegate.acls(filter);
     }
 
     @Override
-    public void close() {
-        if (integrationActive) {
-            delegate.close();
-        }
+    public void close() throws IOException {
+        delegate.close();
     }
 }

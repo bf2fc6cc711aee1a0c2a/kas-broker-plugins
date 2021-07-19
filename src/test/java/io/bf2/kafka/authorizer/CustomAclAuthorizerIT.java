@@ -33,7 +33,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
-import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.util.Collection;
 import java.util.HashMap;
@@ -139,7 +138,7 @@ class CustomAclAuthorizerIT {
 
     @ParameterizedTest
     @CsvFileSource(resources = "/config-invalid-cases.txt", delimiter = '|', lineSeparator = "@\n", nullValues = "-")
-    void testConfigure(String title, String acl) throws UnknownHostException {
+    void testConfigure(String title, String acl) throws IOException {
         try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
             Map<String, Object> config = getConfig(acl);
             assertThrows(IllegalArgumentException.class, () -> auth.configure(config));
@@ -156,7 +155,7 @@ class CustomAclAuthorizerIT {
             ResourceType resourceType,
             String resourceName,
             String listener,
-            AuthorizationResult expectation) throws UnknownHostException {
+            AuthorizationResult expectation) throws IOException {
 
         try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
             AuthorizableRequestContext rc = Mockito.mock(AuthorizableRequestContext.class);
@@ -207,7 +206,7 @@ class CustomAclAuthorizerIT {
             ResourceType resourceType,
             String resourceName,
             String listener,
-            AuthorizationResult expectation) {
+            AuthorizationResult expectation) throws IOException {
 
         Map<String, Object> config = ConfigHelper.getConfig(getClass(), "core", "zookeeper.connect=127.0.0.1:" + zkPort);
 
@@ -228,7 +227,7 @@ class CustomAclAuthorizerIT {
     }
 
     @Test
-    void testCreateAclsAreRetrievable() {
+    void testCreateAclsAreRetrievable() throws IOException {
         try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
             Map<String, Object> config = ConfigHelper.getConfig(CustomAclAuthorizerIT.class, "core", "zookeeper.connect=127.0.0.1:" + zkPort);
             auth.configure(config);
@@ -281,7 +280,7 @@ class CustomAclAuthorizerIT {
     }
 
     @Test
-    void testCreateAclsAreDeleted() {
+    void testCreateAclsAreDeleted() throws IOException {
         try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
             Map<String, Object> config = ConfigHelper.getConfig(CustomAclAuthorizerIT.class, "core", "zookeeper.connect=127.0.0.1:" + zkPort);
             auth.configure(config);

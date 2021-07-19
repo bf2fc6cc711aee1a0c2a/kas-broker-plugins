@@ -34,6 +34,7 @@ class CustomAclBinding extends AclBinding {
 
     static final String USER_TYPE_PREFIX = KafkaPrincipal.USER_TYPE + ":";
 
+    static final String DEFAULT = "default";
     static final String PRINCIPAL = "principal";
     static final String OPERATIONS = "operations";
     static final String APIS = "apis";
@@ -45,8 +46,10 @@ class CustomAclBinding extends AclBinding {
     private final KafkaPrincipal principal;
     private final Pattern listenerPattern;
     private final Set<ApiKeys> apiKeys;
+    private final boolean defaultBinding;
 
     public static List<CustomAclBinding> valueOf(String configuration) {
+        boolean defaultBinding = false;
         ResourcePattern resourcePattern = null;
         String principal = WILDCARD;
         AclPermissionType permissionType = AclPermissionType.ALLOW;
@@ -62,6 +65,10 @@ class CustomAclBinding extends AclBinding {
             String v = token.substring(idx+1).trim();
 
             switch (k) {
+            case DEFAULT:
+                defaultBinding = true;
+                break;
+
             case PRINCIPAL:
                 principal = v;
                 break;
@@ -104,7 +111,7 @@ class CustomAclBinding extends AclBinding {
             throw new IllegalArgumentException("ACL configuration missing resource type: '" + configuration + "'");
         }
 
-        return buildBindings(operations, principal, resourcePattern, listeners, apiKeys, permissionType);
+        return buildBindings(operations, principal, resourcePattern, listeners, apiKeys, permissionType, defaultBinding);
     }
 
     static List<String> splitOnComma(String value) {
@@ -127,7 +134,8 @@ class CustomAclBinding extends AclBinding {
             ResourcePattern resource,
             String listeners,
             Set<ApiKeys> apiKeys,
-            AclPermissionType permission) {
+            AclPermissionType permission,
+            boolean defaultBinding) {
 
         final String bindingPrincipal;
 
@@ -139,17 +147,18 @@ class CustomAclBinding extends AclBinding {
 
         return operations.stream()
             .map(operation -> new AccessControlEntry(bindingPrincipal, WILDCARD, operation, permission))
-            .map(entry -> new CustomAclBinding(resource, entry, listeners, apiKeys))
+            .map(entry -> new CustomAclBinding(resource, entry, listeners, apiKeys, defaultBinding))
             .collect(Collectors.toList());
     }
 
-    CustomAclBinding(ResourcePattern resource, AccessControlEntry entry, String listeners, Set<ApiKeys> apiKeys) {
+    CustomAclBinding(ResourcePattern resource, AccessControlEntry entry, String listeners, Set<ApiKeys> apiKeys, boolean defaultBinding) {
         super(resource, entry);
 
         this.resourceNamePattern = parse(resource.name());
         this.principal = SecurityUtils.parseKafkaPrincipal(entry.principal());
         this.listenerPattern = parse(listeners);
         this.apiKeys = apiKeys.isEmpty() ? Collections.emptySet() : EnumSet.copyOf(apiKeys);
+        this.defaultBinding = defaultBinding;
     }
 
     static Pattern parse(String patternString) {
@@ -157,6 +166,10 @@ class CustomAclBinding extends AclBinding {
             return Pattern.compile(".*");
         }
         return Pattern.compile(patternString);
+    }
+
+    public boolean isDefaultBinding() {
+        return defaultBinding;
     }
 
     public boolean matchesResource(String resourceName) {
@@ -207,12 +220,14 @@ class CustomAclBinding extends AclBinding {
 
     @Override
     public boolean equals(Object o) {
-        return super.equals(o) && Objects.equals(apiKeys, ((CustomAclBinding) o).apiKeys);
+        return super.equals(o) &&
+                Objects.equals(apiKeys, ((CustomAclBinding) o).apiKeys) &&
+                defaultBinding == ((CustomAclBinding) o).defaultBinding;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), apiKeys);
+        return Objects.hash(super.hashCode(), apiKeys, defaultBinding);
     }
 
     @Override
@@ -220,6 +235,7 @@ class CustomAclBinding extends AclBinding {
         return "(pattern=" + super.pattern() +
                 ", entry=" + super.entry() +
                 ", listenerPattern=" + listenerPattern.pattern() +
-                ", apiKeys=" + apiKeys + ")";
+                ", apiKeys=" + apiKeys +
+                ", defaultBinding=" + defaultBinding + ")";
     }
 }
