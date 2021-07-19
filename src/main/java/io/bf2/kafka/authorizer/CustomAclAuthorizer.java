@@ -70,6 +70,10 @@ import java.util.stream.Collectors;
  * <li><code>listeners</code> - a regular expression used to match the listener
  *   name used to make a request. If specified, the ACL will only be used with
  *   requests made via a matching listener.
+ * <li><code>default</code> - boolean value to identify an ACL binding as a default
+ *   binding. Default bindings will only be considered when no Kafka ACLs have been
+ *   configured and there are no other static ACL bindings configured for the
+ *   principal.
  * </ol>
  *
  * Examples:

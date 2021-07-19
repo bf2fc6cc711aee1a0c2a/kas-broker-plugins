@@ -66,7 +66,7 @@ class CustomAclBinding extends AclBinding {
 
             switch (k) {
             case DEFAULT:
-                defaultBinding = true;
+                defaultBinding = Boolean.valueOf(v);
                 break;
 
             case PRINCIPAL:
