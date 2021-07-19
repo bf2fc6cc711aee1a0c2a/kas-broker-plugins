@@ -91,7 +91,7 @@ public class CustomAclAuthorizer implements Authorizer {
     static final String CREATE_ACL_INVALID_BINDING = "Invalid ACL resource or operation";
 
     static final String CONFIG_PREFIX = "strimzi.authorization.custom-authorizer.";
-    static final String ALLOWED_ACLS = CONFIG_PREFIX + "allowed-acls";
+    static final String RESOURCE_OPERATIONS_KEY = CONFIG_PREFIX + "resource-operations";
 
     static final ResourcePatternFilter ANY_RESOURCE = new ResourcePatternFilter(ResourceType.ANY, null, PatternType.ANY);
     static final AccessControlEntryFilter ANY_ENTRY = new AccessControlEntryFilter(null, null, AclOperation.ANY, AclPermissionType.ANY);
@@ -145,14 +145,14 @@ public class CustomAclAuthorizer implements Authorizer {
 
         addAllowedListeners(configs);
 
-        if (configs.containsKey(ALLOWED_ACLS)) {
+        if (configs.containsKey(RESOURCE_OPERATIONS_KEY)) {
             ObjectMapper mapper = new ObjectMapper();
             TypeReference<HashMap<String, List<String>>> typeRef = new TypeReference<HashMap<String, List<String>>>() {};
 
             try {
-                allowedAcls.putAll(mapper.readValue(String.valueOf(configs.get(ALLOWED_ACLS)), typeRef));
+                allowedAcls.putAll(mapper.readValue(String.valueOf(configs.get(RESOURCE_OPERATIONS_KEY)), typeRef));
             } catch (JsonProcessingException e) {
-                throw new IllegalArgumentException(ALLOWED_ACLS, e);
+                throw new IllegalArgumentException(RESOURCE_OPERATIONS_KEY, e);
             }
         }
 
