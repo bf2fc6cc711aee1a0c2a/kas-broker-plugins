@@ -71,9 +71,8 @@ import java.util.stream.Collectors;
  *   name used to make a request. If specified, the ACL will only be used with
  *   requests made via a matching listener.
  * <li><code>default</code> - boolean value to identify an ACL binding as a default
- *   binding. Default bindings will only be considered when no Kafka ACLs have been
- *   configured and there are no other static ACL bindings configured for the
- *   principal.
+ *   binding. Default bindings will be saved as Kafka ACLs when no other
+ *   Kafka ACLs have been configured.
  * </ol>
  *
  * Examples:
@@ -112,7 +111,6 @@ public class CustomAclAuthorizer implements Authorizer {
             Map.entry(AclPermissionType.DENY, AuthorizationResult.DENIED));
 
     final Map<ResourceType, List<CustomAclBinding>> aclMap = new EnumMap<>(ResourceType.class);
-    final List<CustomAclBinding> defaultBindings = new ArrayList<>();
     final Map<String, List<String>> allowedAcls = new HashMap<>();
     final Set<String> aclPrincipals = new HashSet<>();
 
@@ -157,6 +155,7 @@ public class CustomAclAuthorizer implements Authorizer {
         }
 
         log.info("Allowed Custom Group Authorizer Listeners {}", this.allowedListeners);
+        final List<AclBinding> defaultBindings = new ArrayList<>();
 
         // read custom ACLs configured for rest of the users
         configs.entrySet()
@@ -192,6 +191,27 @@ public class CustomAclAuthorizer implements Authorizer {
                         .flatMap(List::stream)
                         .map(Object::toString)
                         .collect(Collectors.joining(",\n\t")));
+        }
+
+        final boolean aclsConfigured = delegate.acls(ANY_ACL).iterator().hasNext();
+        final int defaultBindingCount = defaultBindings.size();
+
+        if (defaultBindingCount > 0 && !aclsConfigured) {
+            CompletableFuture.allOf(delegate.createAcls(null, defaultBindings)
+                .stream()
+                .map(CompletionStage::toCompletableFuture)
+                .toArray(CompletableFuture<?>[]::new))
+                .join();
+
+            if (log.isInfoEnabled()) {
+                log.info("Default ACLs configured in AclAuthorizer:\n\t{}",
+                         defaultBindings.stream()
+                             .map(Object::toString)
+                             .collect(Collectors.joining(",\n\t")));
+            }
+        } else {
+            log.info("Default ACLs not configured, aclsConfigured={}, defaultBindingCount={}",
+                     aclsConfigured, defaultBindingCount);
         }
     }
 
@@ -252,6 +272,19 @@ public class CustomAclAuthorizer implements Authorizer {
                 .orElseGet(() -> delegateOrDeny(requestContext, action));
     }
 
+    Optional<AuthorizationResult> fetchAuthorization(AuthorizableRequestContext requestContext, Action action, List<CustomAclBinding> bindings) {
+        return bindings.stream()
+                .filter(binding -> binding.matchesResource(action.resourcePattern().name()))
+                .filter(binding -> binding.matchesOperation(action.operation()))
+                .filter(binding -> binding.matchesApiKey(requestContext.requestType()))
+                .filter(binding -> binding.matchesPrincipal(requestContext.principal()))
+                .filter(binding -> binding.matchesListener(requestContext.listenerName()))
+                .map(this::logCandidate)
+                .sorted(this::denyFirst)
+                .findFirst()
+                .map(binding -> resultFromBinding(requestContext, action, binding));
+    }
+
     int denyFirst(AclBinding b1, AclBinding b2) {
         AclPermissionType p1 = b1.entry().permissionType();
         AclPermissionType p2 = b2.entry().permissionType();
@@ -297,19 +330,6 @@ public class CustomAclAuthorizer implements Authorizer {
             return AuthorizationResult.DENIED;
         }
 
-        if (!defaultBindings.isEmpty() && !delegate.acls(ANY_ACL).iterator().hasNext()) {
-            if (log.isDebugEnabled()) {
-                log.debug("Kafka ACLs not configured - non-empty default binding list will be considered");
-            }
-
-            Optional<AuthorizationResult> defaultResult =
-                    fetchAuthorization(requestContext, action, defaultBindings);
-
-            if (defaultResult.isPresent()) {
-                return defaultResult.get();
-            }
-        }
-
         // if request made on any allowed listeners allow always
         if (isAllowedListener(requestContext.listenerName())) {
             if (log.isDebugEnabled()) {
@@ -324,19 +344,6 @@ public class CustomAclAuthorizer implements Authorizer {
 
         // Indeterminate result - delegate to default ACL handling
         return delegate.authorize(requestContext, List.of(action)).get(0);
-    }
-
-    Optional<AuthorizationResult> fetchAuthorization(AuthorizableRequestContext requestContext, Action action, List<CustomAclBinding> bindings) {
-        return bindings.stream()
-                .filter(binding -> binding.matchesResource(action.resourcePattern().name()))
-                .filter(binding -> binding.matchesOperation(action.operation()))
-                .filter(binding -> binding.matchesApiKey(requestContext.requestType()))
-                .filter(binding -> binding.matchesPrincipal(requestContext.principal()))
-                .filter(binding -> binding.matchesListener(requestContext.listenerName()))
-                .map(this::logCandidate)
-                .sorted(this::denyFirst)
-                .findFirst()
-                .map(binding -> resultFromBinding(requestContext, action, binding));
     }
 
     boolean hasPrincipalBindings(String principalName) {

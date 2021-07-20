@@ -88,7 +88,6 @@ class CustomAclAuthorizerTest {
                 .collect(Collectors.toCollection(HashSet::new));
 
             assertEquals(20, uniqueBindings.size());
-            assertEquals(1, auth.defaultBindings.size());
         }
     }
 
@@ -156,7 +155,6 @@ class CustomAclAuthorizerTest {
         "Test user `any` ALLOWED READ GROUP `abc` on loop listener,       User:any,   loop,                           READ,   GROUP,   abc, ALLOWED",
         "Test user `any` ALLOWED READ GROUP `abc` on full loop listener,  User:any,   loop-9021://127.0.0.1:9021,     READ,   GROUP,   abc, ALLOWED",
         "Test user `any` DENIED READ GROUP `abc` on something listener,   User:any,   something,                      READ,   GROUP,   abc, DENIED",
-        "Test user `any` ALLOWED WRITE TOPIC `pub` on something listener, User:any,   something,                      WRITE,  TOPIC,   pub, ALLOWED",
     })
     void testAuthorize(String title,
             String principal,

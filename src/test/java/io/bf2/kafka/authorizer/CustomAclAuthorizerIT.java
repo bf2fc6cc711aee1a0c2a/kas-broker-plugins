@@ -199,6 +199,8 @@ class CustomAclAuthorizerIT {
         "user1,       DESCRIBE, LIST_OFFSETS, TOPIC, user1_test_topic,     external-9094, ALLOWED",
         // Sample of user1 DENIED operations
         "user1,       READ,     FETCH,        TOPIC, user2_test_topic,     external-9094, DENIED",
+        // Sample of user1 ALLOWED operations, relies on "default" ACL
+        "user1,       READ,     FETCH,        TOPIC, pub,                  external-9094, ALLOWED",
     })
     void testAuthorizeCoreConfigs(String principal,
             AclOperation operation,
