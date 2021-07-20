@@ -55,10 +55,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CustomAclAuthorizerIT {
 
-    final ResourcePatternFilter anyResource = new ResourcePatternFilter(ResourceType.ANY, null, PatternType.ANY);
-    final AccessControlEntryFilter anyEntry = new AccessControlEntryFilter(null, null, AclOperation.ANY, AclPermissionType.ANY);
-    final AclBindingFilter anyAcl = new AclBindingFilter(anyResource, anyEntry);
-
     static class ZooKeeperServer extends ZooKeeperServerMain {
         @Override
         public void shutdown() {
@@ -111,7 +107,7 @@ class CustomAclAuthorizerIT {
         try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
             Map<String, Object> config = getConfig();
             auth.configure(config);
-            auth.deleteAcls(null, List.of(anyAcl));
+            auth.deleteAcls(null, List.of(AclBindingFilter.ANY));
         }
     }
 
@@ -376,7 +372,7 @@ class CustomAclAuthorizerIT {
                                                      true));
 
             auth.configureDefaults(defaultBindings);
-            assertEquals(2, StreamSupport.stream(auth.acls(anyAcl).spliterator(), false).count());
+            assertEquals(2, StreamSupport.stream(auth.acls(AclBindingFilter.ANY).spliterator(), false).count());
         }
     }
 }

@@ -62,7 +62,11 @@ import java.util.stream.IntStream;
  *   defaults to <code>*</code> and the ACL applies to all users.
  * <li>resource - a key/value pair where the key is one of the enumerated resource
  *   types (see {@link ResourceType}) and the value is the resource name. A wildcard
- *   <code>*</code> may be used to match any resource of the associated type.
+ *   <code>*</code> may be used to match any resource of the associated type. If
+ *   the resource name is not a single wildcard (<code>*</code>) and ends with an
+ *   asterisk/glob, the type of pattern is considered to be
+ *   {@link PatternType.PREFIXED PREFIXED}, otherwise it is considered to be
+ *   {@link PatternType.LITERAL LITERAL}
  * <li><code>operations</code> - comma-delimited list of operations for the
  *   ACL binding. See {@link AclOperation} for the enumeration names. <em>Required</em>
  * <li><code>apis</code> - comma-delimited list of APIs to further focus the ACL
@@ -76,9 +80,18 @@ import java.util.stream.IntStream;
  * </ol>
  *
  * Examples:
+ * <p>Allow user <code>admin</code> access to read, write, and create topics
+ *    prefixed with <code>foo</code>.
  * <pre>
- * acl.1: permission=allow;principal=admin;topic=foo;operations=read,write,create
+ * acl.1: permission=allow;principal=admin;topic=foo*;operations=read,write,create
+ * </pre>
+ * <p>Allow all users access to read a topic named exactly <code>bar</code>.
+ * <pre>
  * acl.2: permission=allow;topic=bar;operations=read
+ * </pre>
+ * <p>Deny all users access to read and create consumer groups named <code>xyz</code>
+ *    when connecting via a listener with a name starting with <code>internal</code>.
+ * <pre>
  * acl.3: permission=deny;listener=internal.*;group=xyz;operations=read,create
  * </pre>
  */

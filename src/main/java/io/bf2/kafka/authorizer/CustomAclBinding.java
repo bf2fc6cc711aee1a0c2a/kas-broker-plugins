@@ -101,8 +101,11 @@ class CustomAclBinding extends AclBinding {
 
             default:
                 ResourceType type = ResourceType.fromString(k);
-                validate("Resource type '" + k +"'", type, ResourceType.UNKNOWN);
-                resourcePattern = new ResourcePattern(type, v, PatternType.PREFIXED);
+                validate("Resource type '" + k + "'", type, ResourceType.UNKNOWN);
+                boolean usesGlob = v.length() > 1 && v.endsWith("*");
+                PatternType patternType = usesGlob ? PatternType.PREFIXED : PatternType.LITERAL;
+                String name = usesGlob ? v.substring(0, v.length() - 1) : v; //Remove the glob, replaced with PREFIXED PatternType
+                resourcePattern = new ResourcePattern(type, name, patternType);
                 break;
             }
         }
@@ -154,11 +157,27 @@ class CustomAclBinding extends AclBinding {
     CustomAclBinding(ResourcePattern resource, AccessControlEntry entry, String listeners, Set<ApiKeys> apiKeys, boolean defaultBinding) {
         super(resource, entry);
 
-        this.resourceNamePattern = parse(resource.name());
+        this.resourceNamePattern = resourceNamePattern(resource);
         this.principal = SecurityUtils.parseKafkaPrincipal(entry.principal());
         this.listenerPattern = parse(listeners);
         this.apiKeys = apiKeys.isEmpty() ? Collections.emptySet() : EnumSet.copyOf(apiKeys);
         this.defaultBinding = defaultBinding;
+    }
+
+    static Pattern resourceNamePattern(ResourcePattern resource) {
+        final String resourceName = resource.name();
+        final PatternType type = resource.patternType();
+        final Pattern result;
+
+        if (type == PatternType.PREFIXED) {
+            result = Pattern.compile("^" + Pattern.quote(resourceName) + ".*");
+        } else if (ResourcePattern.WILDCARD_RESOURCE.equals(resourceName)) {
+            result = Pattern.compile(".*");
+        } else {
+            result = Pattern.compile("^" + Pattern.quote(resourceName) + "$");
+        }
+
+        return result;
     }
 
     static Pattern parse(String patternString) {
