@@ -22,6 +22,7 @@ import org.apache.zookeeper.server.ServerConfig;
 import org.apache.zookeeper.server.ZooKeeperServerMain;
 import org.apache.zookeeper.server.admin.AdminServer.AdminServerException;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -34,11 +35,13 @@ import java.io.UncheckedIOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
@@ -51,6 +54,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CustomAclAuthorizerIT {
+
+    final ResourcePatternFilter anyResource = new ResourcePatternFilter(ResourceType.ANY, null, PatternType.ANY);
+    final AccessControlEntryFilter anyEntry = new AccessControlEntryFilter(null, null, AclOperation.ANY, AclPermissionType.ANY);
+    final AclBindingFilter anyAcl = new AclBindingFilter(anyResource, anyEntry);
 
     static class ZooKeeperServer extends ZooKeeperServerMain {
         @Override
@@ -91,35 +98,21 @@ class CustomAclAuthorizerIT {
         };
 
         zkThread.start();
-
-        // Seed the system with ACLs for User:user1
-        try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
-            Map<String, Object> config = ConfigHelper.getConfig(CustomAclAuthorizerIT.class, "core", "zookeeper.connect=127.0.0.1:" + zkPort);
-            auth.configure(config);
-
-            AuthorizableRequestContext rc = Mockito.mock(AuthorizableRequestContext.class);
-            Mockito.when(rc.clientAddress()).thenReturn(InetAddress.getLoopbackAddress());
-            Mockito.when(rc.listenerName()).thenReturn("security-9095");
-            Mockito.when(rc.principal()).thenReturn(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "owner1"));
-            Mockito.when(rc.requestType()).thenReturn((int) ApiKeys.CREATE_ACLS.id);
-
-            KafkaPrincipal user1 = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "user1");
-
-            AclBinding readUser1Topics = new AclBinding(
-                    new ResourcePattern(ResourceType.TOPIC, "user1_", PatternType.PREFIXED),
-                    new AccessControlEntry(user1.toString(), "*", AclOperation.READ, AclPermissionType.ALLOW));
-            AclBinding writeUser1Topics = new AclBinding(
-                    new ResourcePattern(ResourceType.TOPIC, "user1_", PatternType.PREFIXED),
-                    new AccessControlEntry(user1.toString(), "*", AclOperation.WRITE, AclPermissionType.ALLOW));
-
-            auth.createAcls(rc, List.of(readUser1Topics, writeUser1Topics));
-        }
     }
 
     @AfterAll
     static void shutdown() throws InterruptedException {
         zk.shutdown();
         zkThread.join();
+    }
+
+    @AfterEach
+    void cleanup() throws IOException {
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
+            Map<String, Object> config = getConfig();
+            auth.configure(config);
+            auth.deleteAcls(null, List.of(anyAcl));
+        }
     }
 
     @SuppressWarnings("removal")
@@ -134,6 +127,25 @@ class CustomAclAuthorizerIT {
         }
         config.put(ALLOWED_LISTENERS, "PLAIN-9092,SRE-9096");
         return config;
+    }
+
+    static void createAclsUser1(CustomAclAuthorizer auth) {
+        AuthorizableRequestContext rc = Mockito.mock(AuthorizableRequestContext.class);
+        Mockito.when(rc.clientAddress()).thenReturn(InetAddress.getLoopbackAddress());
+        Mockito.when(rc.listenerName()).thenReturn("security-9095");
+        Mockito.when(rc.principal()).thenReturn(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "owner1"));
+        Mockito.when(rc.requestType()).thenReturn((int) ApiKeys.CREATE_ACLS.id);
+
+        KafkaPrincipal user1 = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "user1");
+
+        AclBinding readUser1Topics = new AclBinding(
+                new ResourcePattern(ResourceType.TOPIC, "user1_", PatternType.PREFIXED),
+                new AccessControlEntry(user1.toString(), "*", AclOperation.READ, AclPermissionType.ALLOW));
+        AclBinding writeUser1Topics = new AclBinding(
+                new ResourcePattern(ResourceType.TOPIC, "user1_", PatternType.PREFIXED),
+                new AccessControlEntry(user1.toString(), "*", AclOperation.WRITE, AclPermissionType.ALLOW));
+
+        auth.createAcls(rc, List.of(readUser1Topics, writeUser1Topics));
     }
 
     @ParameterizedTest
@@ -213,13 +225,16 @@ class CustomAclAuthorizerIT {
         Map<String, Object> config = ConfigHelper.getConfig(getClass(), "core", "zookeeper.connect=127.0.0.1:" + zkPort);
 
         try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
+            auth.configure(config);
+
+            // Seed the system with ACLs for User:user1
+            createAclsUser1(auth);
+
             AuthorizableRequestContext rc = Mockito.mock(AuthorizableRequestContext.class);
             Mockito.when(rc.clientAddress()).thenReturn(InetAddress.getLoopbackAddress());
             Mockito.when(rc.listenerName()).thenReturn(listener);
             Mockito.when(rc.principal()).thenReturn(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, principal));
             Mockito.when(rc.requestType()).thenReturn((int) apiKey.id);
-
-            auth.configure(config);
 
             ResourcePattern resource = new ResourcePattern(resourceType, resourceName, PatternType.LITERAL);
             List<Action> actions = List.of(new Action(operation, resource, 0, false, false));
@@ -340,6 +355,28 @@ class CustomAclAuthorizerIT {
                     new AccessControlEntryFilter(user2.toString(), "*", AclOperation.ANY, AclPermissionType.ANY)));
             var listAllAcls = StreamSupport.stream(listAllAclsIter.spliterator(), false).collect(Collectors.toList());
             assertEquals(0, listAllAcls.size());
+        }
+    }
+
+    @Test
+    void testConfigureDefaultsInvalidIgnored() throws IOException {
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
+            Map<String, Object> config = getConfig();
+            auth.configure(config);
+
+            var defaultBindings = new ArrayList<AclBinding>();
+            defaultBindings.addAll(CustomAclBinding.valueOf("default=true;permission=allow;topic=pub;operations=all"));
+            defaultBindings.addAll(CustomAclBinding.valueOf("default=true;permission=deny;group=priv;operations=all"));
+
+            // Invalid binding
+            defaultBindings.add(new CustomAclBinding(new ResourcePattern(ResourceType.CLUSTER, "*", PatternType.LITERAL),
+                                                     new AccessControlEntry("User:*", "*", AclOperation.ALL, AclPermissionType.UNKNOWN),
+                                                     "*",
+                                                     Set.of(),
+                                                     true));
+
+            auth.configureDefaults(defaultBindings);
+            assertEquals(2, StreamSupport.stream(auth.acls(anyAcl).spliterator(), false).count());
         }
     }
 }

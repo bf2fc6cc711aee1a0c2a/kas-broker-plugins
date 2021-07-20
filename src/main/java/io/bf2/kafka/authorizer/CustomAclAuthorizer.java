@@ -32,7 +32,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.math.BigInteger;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -49,6 +48,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * A authorizer for Kafka that defines custom ACLs. The configuration is provided as
@@ -161,8 +161,6 @@ public class CustomAclAuthorizer implements Authorizer {
         configs.entrySet()
             .stream()
             .filter(config -> ACL_PATTERN.matcher(config.getKey()).matches())
-            // Order significant for unit test
-            .sorted((c1, c2) -> parseAclSequence(c1).compareTo(parseAclSequence(c2)))
             .map(Map.Entry::getValue)
             .filter(String.class::isInstance)
             .map(String.class::cast)
@@ -193,26 +191,7 @@ public class CustomAclAuthorizer implements Authorizer {
                         .collect(Collectors.joining(",\n\t")));
         }
 
-        final boolean aclsConfigured = delegate.acls(ANY_ACL).iterator().hasNext();
-        final int defaultBindingCount = defaultBindings.size();
-
-        if (defaultBindingCount > 0 && !aclsConfigured) {
-            CompletableFuture.allOf(delegate.createAcls(null, defaultBindings)
-                .stream()
-                .map(CompletionStage::toCompletableFuture)
-                .toArray(CompletableFuture<?>[]::new))
-                .join();
-
-            if (log.isInfoEnabled()) {
-                log.info("Default ACLs configured in AclAuthorizer:\n\t{}",
-                         defaultBindings.stream()
-                             .map(Object::toString)
-                             .collect(Collectors.joining(",\n\t")));
-            }
-        } else {
-            log.info("Default ACLs not configured, aclsConfigured={}, defaultBindingCount={}",
-                     aclsConfigured, defaultBindingCount);
-        }
+        configureDefaults(defaultBindings);
     }
 
     /**
@@ -232,10 +211,51 @@ public class CustomAclAuthorizer implements Authorizer {
         }
     }
 
-    BigInteger parseAclSequence(Map.Entry<String, ?> config) {
-        String key = config.getKey();
-        String integerComponent = key.substring(key.lastIndexOf('.') + 1);
-        return new BigInteger(integerComponent);
+    void configureDefaults(List<AclBinding> defaultBindings) {
+        final boolean aclsConfigured = delegate.acls(ANY_ACL).iterator().hasNext();
+        final int defaultBindingCount = defaultBindings.size();
+
+        if (defaultBindingCount > 0 && !aclsConfigured) {
+            var bindingsConfigured = new ArrayList<>();
+            var createResults = delegate.createAcls(null, defaultBindings);
+
+            var pendingCompletion = IntStream.range(0, createResults.size())
+                .mapToObj(i -> {
+                    var binding = defaultBindings.get(i);
+                    var stage = createResults.get(i);
+
+                    return stage.whenComplete((result, error) -> {
+                        if (error != null) {
+                            log.error("Failed to configure default ACL in AclAuthorizer: [{}]", binding, error);
+                        } else if (result.exception().isPresent()) {
+                            log.error("Failed to configure default ACL in AclAuthorizer: [{}]", binding, result.exception().get());
+                        } else {
+                            bindingsConfigured.add(binding);
+                        }
+                    }).toCompletableFuture();
+                })
+                .toArray(CompletableFuture<?>[]::new);
+
+            CompletableFuture.allOf(pendingCompletion)
+                .whenComplete((nothing, error) -> {
+                    if (error != null) {
+                        log.error("Failed to configure default ACLs in AclAuthorizer:\n\t{}",
+                                 defaultBindings.stream()
+                                     .map(Object::toString)
+                                     .collect(Collectors.joining(",\n\t")),
+                                 error);
+                    } else if (log.isInfoEnabled()) {
+                        log.info("ACLs configured in AclAuthorizer:\n\t{}",
+                                 bindingsConfigured.stream()
+                                     .map(Object::toString)
+                                     .collect(Collectors.joining(",\n\t")));
+                    }
+                })
+                .join();
+        } else {
+            log.info("Default ACLs not configured, aclsConfigured={}, defaultBindingCount={}",
+                     aclsConfigured, defaultBindingCount);
+        }
     }
 
     @Override
