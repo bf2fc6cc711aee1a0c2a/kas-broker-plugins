@@ -1,5 +1,4 @@
 /*
- * Copyright Strimzi authors.
  * License: Apache License 2.0 (see the file LICENSE or http://apache.org/licenses/LICENSE-2.0.html).
  */
 package io.bf2.kafka.authorizer;
@@ -14,7 +13,7 @@ class PattenMatchedAclBinding extends AclBinding {
 
     private Pattern pattern;
 
-    public PattenMatchedAclBinding(ResourcePattern resource, AccessControlEntry entry) {
+    PattenMatchedAclBinding(ResourcePattern resource, AccessControlEntry entry) {
         super(resource, entry);
         String str = resource.name();
         if (str.equals("*")) {

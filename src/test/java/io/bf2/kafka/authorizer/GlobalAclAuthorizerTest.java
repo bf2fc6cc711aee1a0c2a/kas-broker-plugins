@@ -1,13 +1,7 @@
 /*
- * Copyright Strimzi authors.
  * License: Apache License 2.0 (see the file LICENSE or http://apache.org/licenses/LICENSE-2.0.html).
  */
 package io.bf2.kafka.authorizer;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static io.bf2.kafka.authorizer.GlobalAclAuthorizer.CONFIG_PREFIX;
-import static io.bf2.kafka.authorizer.GlobalAclAuthorizer.ALLOWED_LISTENERS;
 
 import org.apache.kafka.common.acl.AclBinding;
 import org.apache.kafka.common.acl.AclOperation;
@@ -19,20 +13,25 @@ import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.server.authorizer.Action;
 import org.apache.kafka.server.authorizer.AuthorizableRequestContext;
 import org.apache.kafka.server.authorizer.AuthorizationResult;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.Arrays;
 import java.util.HashMap;
 
-public class GlobalAclAuthorizerTest
+import static io.bf2.kafka.authorizer.GlobalAclAuthorizer.ALLOWED_LISTENERS;
+import static io.bf2.kafka.authorizer.GlobalAclAuthorizer.CONFIG_PREFIX;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+
+class GlobalAclAuthorizerTest
 {
     @Test
-    public void testLoad(){
+    void testLoad(){
         GlobalAclAuthorizer auth = new GlobalAclAuthorizer();
 
         HashMap<String, Object> config = new HashMap<>();
-        config.put( CONFIG_PREFIX + ALLOWED_LISTENERS, "canary, loop");
+        config.put(CONFIG_PREFIX + ALLOWED_LISTENERS, "canary, loop");
         config.put(CONFIG_PREFIX + "acl.1", "permission=allow;topic=foo;operations=read,write,create");
         config.put(CONFIG_PREFIX + "acl.2", "permission=allow;topic=bar;operations=read");
         config.put(CONFIG_PREFIX + "acl.3", "permission=deny;group=xyz;operations=read,create");
@@ -40,54 +39,54 @@ public class GlobalAclAuthorizerTest
         auth.configure(config);
 
         AclBinding acl = auth.aclMap.get(ResourceType.TOPIC).get(0);
-        assertTrue(acl.entry().permissionType() == AclPermissionType.ALLOW);
+        assertSame(AclPermissionType.ALLOW, acl.entry().permissionType());
         ResourcePattern resource = acl.pattern();
         assertEquals("foo", resource.name());
         assertEquals(ResourceType.TOPIC, resource.resourceType());
         assertEquals(AclOperation.READ, acl.entry().operation());
 
         acl = auth.aclMap.get(ResourceType.TOPIC).get(1);
-        assertTrue(acl.entry().permissionType() == AclPermissionType.ALLOW);
+        assertSame(AclPermissionType.ALLOW, acl.entry().permissionType());
         resource = acl.pattern();
         assertEquals("foo", resource.name());
         assertEquals(ResourceType.TOPIC, resource.resourceType());
         assertEquals(AclOperation.WRITE, acl.entry().operation());
 
         acl = auth.aclMap.get(ResourceType.TOPIC).get(2);
-        assertTrue(acl.entry().permissionType() == AclPermissionType.ALLOW);
+        assertSame(AclPermissionType.ALLOW, acl.entry().permissionType());
         resource = acl.pattern();
         assertEquals("foo", resource.name());
         assertEquals(ResourceType.TOPIC, resource.resourceType());
         assertEquals(AclOperation.CREATE, acl.entry().operation());
 
         acl = auth.aclMap.get(ResourceType.TOPIC).get(3);
-        assertTrue(acl.entry().permissionType() == AclPermissionType.ALLOW);
+        assertSame(AclPermissionType.ALLOW, acl.entry().permissionType());
         resource = acl.pattern();
         assertEquals("bar", resource.name());
         assertEquals(ResourceType.TOPIC, resource.resourceType());
         assertEquals(AclOperation.READ, acl.entry().operation());
 
         acl = auth.aclMap.get(ResourceType.GROUP).get(0);
-        assertTrue(acl.entry().permissionType() == AclPermissionType.DENY);
+        assertSame(AclPermissionType.DENY, acl.entry().permissionType());
         resource = acl.pattern();
         assertEquals("xyz", resource.name());
         assertEquals(ResourceType.GROUP, resource.resourceType());
         assertEquals(AclOperation.READ, acl.entry().operation());
 
         acl = auth.aclMap.get(ResourceType.GROUP).get(1);
-        assertTrue(acl.entry().permissionType() == AclPermissionType.DENY);
+        assertSame(AclPermissionType.DENY, acl.entry().permissionType());
         resource = acl.pattern();
         assertEquals("xyz", resource.name());
         assertEquals(ResourceType.GROUP, resource.resourceType());
         assertEquals(AclOperation.CREATE, acl.entry().operation());
 
-        assertEquals(auth.allowedListeners, Arrays.asList("canary", "loop"));
+        assertEquals(Arrays.asList("canary", "loop"), auth.allowedListeners);
 
         auth.close();
     }
 
     @Test
-    public void testAuthorize() {
+    void testAuthorize() {
         GlobalAclAuthorizer auth = new GlobalAclAuthorizer() {
             @Override
             public boolean isSuperUser(KafkaPrincipal principal) {
@@ -105,7 +104,6 @@ public class GlobalAclAuthorizerTest
         config.put(CONFIG_PREFIX + "acl.4", "permission=allow;topic=abc;operations=all");
         config.put(CONFIG_PREFIX + "acl.5", "permission=allow;topic=*;operations=read");
         config.put(CONFIG_PREFIX + ALLOWED_LISTENERS, " canary, loop");
-
 
         auth.configure(config);
 
@@ -159,4 +157,5 @@ public class GlobalAclAuthorizerTest
 
         auth.close();
     }
+
 }
