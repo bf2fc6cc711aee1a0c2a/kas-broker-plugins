@@ -198,7 +198,7 @@
                     <pushChanges>false</pushChanges>
                     <localCheckout>true</localCheckout>
                     <remoteTagging>false</remoteTagging>
-                    <arguments>-Dmaven.deploy.skip=true ${release.arguments}</arguments>
+                    <arguments>-Dmaven.deploy.skip=true</arguments>
                     <allowTimestampedSnapshots>true</allowTimestampedSnapshots>
                 </configuration>
             </plugin>
