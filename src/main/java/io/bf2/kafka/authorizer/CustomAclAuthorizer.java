@@ -123,7 +123,8 @@ public class CustomAclAuthorizer implements Authorizer {
             Map.entry(AclPermissionType.ALLOW, AuthorizationResult.ALLOWED),
             Map.entry(AclPermissionType.DENY, AuthorizationResult.DENIED));
 
-    final Map<ResourceType, List<CustomAclBinding>> aclMap = new EnumMap<>(ResourceType.class);
+    final Map<ResourceType, List<CustomAclBinding>> predelegationAclMap = new EnumMap<>(ResourceType.class);
+    final Map<ResourceType, List<CustomAclBinding>> overrideAclMap = new EnumMap<>(ResourceType.class);
     final Map<String, List<String>> allowedAcls = new HashMap<>();
     final Set<String> aclPrincipals = new HashSet<>();
 
@@ -180,24 +181,28 @@ public class CustomAclAuthorizer implements Authorizer {
             .map(CustomAclBinding::valueOf)
             .flatMap(List::stream)
             .forEach(binding -> {
-                if (binding.isDefaultBinding()) {
+                switch (binding.getCategory()) {
+                case DEFAULT_BINDING:
                     defaultBindings.add(binding);
-                } else {
-                    aclMap.compute(binding.pattern().resourceType(), (k, v) -> {
-                        List<CustomAclBinding> bindings = Objects.requireNonNullElseGet(v, ArrayList::new);
-                        bindings.add(binding);
-                        return bindings;
-                    });
+                    break;
+                case OVERRIDE_BINDING:
+                    addBinding(overrideAclMap, binding);
+                    break;
+                case PREDELEGATION_BINDING:
+                    addBinding(predelegationAclMap, binding);
 
                     if (binding.isPrincipalSpecified()) {
                         aclPrincipals.add(binding.entry().principal());
                     }
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unexpected binding Category: " + binding.getCategory());
                 }
             });
 
         if (log.isInfoEnabled()) {
             log.info("Custom Authorizer ACLs configured:\n\t{}",
-                    aclMap.values()
+                    predelegationAclMap.values()
                         .stream()
                         .flatMap(List::stream)
                         .map(Object::toString)
@@ -222,6 +227,14 @@ public class CustomAclAuthorizer implements Authorizer {
                 .stream()
                 .forEach(listener -> allowedListeners.add(listener.trim()));
         }
+    }
+
+    static void addBinding(Map<ResourceType, List<CustomAclBinding>> aclMap, CustomAclBinding binding) {
+        aclMap.compute(binding.pattern().resourceType(), (k, v) -> {
+            List<CustomAclBinding> bindings = Objects.requireNonNullElseGet(v, ArrayList::new);
+            bindings.add(binding);
+            return bindings;
+        });
     }
 
     void configureDefaults(List<AclBinding> defaultBindings) {
@@ -258,7 +271,7 @@ public class CustomAclAuthorizer implements Authorizer {
                                      .collect(Collectors.joining(",\n\t")),
                                  error);
                     } else if (log.isInfoEnabled()) {
-                        log.info("ACLs configured in AclAuthorizer:\n\t{}",
+                        log.info("Default ACLs configured in AclAuthorizer:\n\t{}",
                                  bindingsConfigured.stream()
                                      .map(Object::toString)
                                      .collect(Collectors.joining(",\n\t")));
@@ -299,7 +312,7 @@ public class CustomAclAuthorizer implements Authorizer {
         }
 
         List<CustomAclBinding> bindings =
-                aclMap.getOrDefault(action.resourcePattern().resourceType(), Collections.emptyList());
+                predelegationAclMap.getOrDefault(action.resourcePattern().resourceType(), Collections.emptyList());
 
         return fetchAuthorization(requestContext, action, bindings)
                 .orElseGet(() -> delegateOrDeny(requestContext, action));
@@ -376,7 +389,17 @@ public class CustomAclAuthorizer implements Authorizer {
         }
 
         // Indeterminate result - delegate to default ACL handling
-        return delegate.authorize(requestContext, List.of(action)).get(0);
+        AuthorizationResult delegationResult = delegate.authorize(requestContext, List.of(action)).get(0);
+
+        if (delegationResult == AuthorizationResult.ALLOWED) {
+            List<CustomAclBinding> bindings =
+                    overrideAclMap.getOrDefault(action.resourcePattern().resourceType(), Collections.emptyList());
+
+            return fetchAuthorization(requestContext, action, bindings)
+                    .orElse(delegationResult);
+        }
+
+        return delegationResult;
     }
 
     boolean hasPrincipalBindings(String principalName) {

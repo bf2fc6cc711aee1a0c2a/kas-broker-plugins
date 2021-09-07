@@ -1,5 +1,6 @@
 package io.bf2.kafka.authorizer;
 
+import io.bf2.kafka.authorizer.CustomAclBinding.Category;
 import org.apache.kafka.common.acl.AccessControlEntry;
 import org.apache.kafka.common.acl.AccessControlEntryFilter;
 import org.apache.kafka.common.acl.AclBinding;
@@ -369,7 +370,7 @@ class CustomAclAuthorizerIT {
                                                      new AccessControlEntry("User:*", "*", AclOperation.ALL, AclPermissionType.UNKNOWN),
                                                      "*",
                                                      Set.of(),
-                                                     true));
+                                                     Category.DEFAULT_BINDING));
 
             auth.configureDefaults(defaultBindings);
             assertEquals(2, StreamSupport.stream(auth.acls(AclBindingFilter.ANY).spliterator(), false).count());

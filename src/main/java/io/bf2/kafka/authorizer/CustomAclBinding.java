@@ -35,6 +35,7 @@ class CustomAclBinding extends AclBinding {
     static final String USER_TYPE_PREFIX = KafkaPrincipal.USER_TYPE + ":";
 
     static final String DEFAULT = "default";
+    static final String OVERRIDE = "override";
     static final String PRINCIPAL = "principal";
     static final String OPERATIONS = "operations";
     static final String APIS = "apis";
@@ -46,10 +47,29 @@ class CustomAclBinding extends AclBinding {
     private final KafkaPrincipal principal;
     private final Pattern listenerPattern;
     private final Set<ApiKeys> apiKeys;
-    private final boolean defaultBinding;
+    private final Category category;
+
+    public enum Category {
+        /**
+         * Category of bindings that will be created as Kafka ACLs if no other Kafka ACLs
+         * exist upon broker start-up.
+         */
+        DEFAULT_BINDING,
+        /**
+         * Category of bindings that will be processed following delegation to the Kafka AclAuthorizer only when
+         * the authorizer allows the action. Bindings in this category are meant to prevent authorization of certain
+         * APIs, a level of granularity not supported by Kafka ACLs.
+         */
+        OVERRIDE_BINDING,
+        /**
+         * Category of bindings that will be process before delegating to the Kafka AclAuthorizer.
+         */
+        PREDELEGATION_BINDING
+    }
 
     public static List<CustomAclBinding> valueOf(String configuration) {
         boolean defaultBinding = false;
+        boolean overrideBinding = false;
         ResourcePattern resourcePattern = null;
         String principal = WILDCARD;
         AclPermissionType permissionType = AclPermissionType.ALLOW;
@@ -67,6 +87,10 @@ class CustomAclBinding extends AclBinding {
             switch (k) {
             case DEFAULT:
                 defaultBinding = Boolean.valueOf(v);
+                break;
+
+            case OVERRIDE:
+                overrideBinding = Boolean.valueOf(v);
                 break;
 
             case PRINCIPAL:
@@ -114,7 +138,17 @@ class CustomAclBinding extends AclBinding {
             throw new IllegalArgumentException("ACL configuration missing resource type: '" + configuration + "'");
         }
 
-        return buildBindings(operations, principal, resourcePattern, listeners, apiKeys, permissionType, defaultBinding);
+        final Category category;
+
+        if (defaultBinding) {
+            category = Category.DEFAULT_BINDING;
+        } else if (overrideBinding) {
+            category = Category.OVERRIDE_BINDING;
+        } else {
+            category = Category.PREDELEGATION_BINDING;
+        }
+
+        return buildBindings(operations, principal, resourcePattern, listeners, apiKeys, permissionType, category);
     }
 
     static List<String> splitOnComma(String value) {
@@ -138,7 +172,7 @@ class CustomAclBinding extends AclBinding {
             String listeners,
             Set<ApiKeys> apiKeys,
             AclPermissionType permission,
-            boolean defaultBinding) {
+            Category category) {
 
         final String bindingPrincipal;
 
@@ -150,18 +184,18 @@ class CustomAclBinding extends AclBinding {
 
         return operations.stream()
             .map(operation -> new AccessControlEntry(bindingPrincipal, WILDCARD, operation, permission))
-            .map(entry -> new CustomAclBinding(resource, entry, listeners, apiKeys, defaultBinding))
+            .map(entry -> new CustomAclBinding(resource, entry, listeners, apiKeys, category))
             .collect(Collectors.toList());
     }
 
-    CustomAclBinding(ResourcePattern resource, AccessControlEntry entry, String listeners, Set<ApiKeys> apiKeys, boolean defaultBinding) {
+    CustomAclBinding(ResourcePattern resource, AccessControlEntry entry, String listeners, Set<ApiKeys> apiKeys, Category category) {
         super(resource, entry);
 
         this.resourceNamePattern = resourceNamePattern(resource);
         this.principal = SecurityUtils.parseKafkaPrincipal(entry.principal());
         this.listenerPattern = parse(listeners);
         this.apiKeys = apiKeys.isEmpty() ? Collections.emptySet() : EnumSet.copyOf(apiKeys);
-        this.defaultBinding = defaultBinding;
+        this.category = category;
     }
 
     static Pattern resourceNamePattern(ResourcePattern resource) {
@@ -187,8 +221,8 @@ class CustomAclBinding extends AclBinding {
         return Pattern.compile(patternString);
     }
 
-    public boolean isDefaultBinding() {
-        return defaultBinding;
+    public Category getCategory() {
+        return category;
     }
 
     public boolean matchesResource(String resourceName) {
@@ -241,12 +275,12 @@ class CustomAclBinding extends AclBinding {
     public boolean equals(Object o) {
         return super.equals(o) &&
                 Objects.equals(apiKeys, ((CustomAclBinding) o).apiKeys) &&
-                defaultBinding == ((CustomAclBinding) o).defaultBinding;
+                category == ((CustomAclBinding) o).category;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), apiKeys, defaultBinding);
+        return Objects.hash(super.hashCode(), apiKeys, category);
     }
 
     @Override
@@ -255,6 +289,6 @@ class CustomAclBinding extends AclBinding {
                 ", entry=" + super.entry() +
                 ", listenerPattern=" + listenerPattern.pattern() +
                 ", apiKeys=" + apiKeys +
-                ", defaultBinding=" + defaultBinding + ")";
+                ", category=" + category + ")";
     }
 }

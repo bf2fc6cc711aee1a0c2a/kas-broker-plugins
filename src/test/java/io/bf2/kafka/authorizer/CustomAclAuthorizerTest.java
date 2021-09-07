@@ -82,7 +82,7 @@ class CustomAclAuthorizerTest {
         try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
             auth.configure(config);
 
-            Set<CustomAclBinding> uniqueBindings = auth.aclMap.values()
+            Set<CustomAclBinding> uniqueBindings = auth.predelegationAclMap.values()
                 .stream()
                 .flatMap(List::stream)
                 .collect(Collectors.toCollection(HashSet::new));
@@ -114,7 +114,7 @@ class CustomAclAuthorizerTest {
         try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
             auth.configure(config);
 
-            List<CustomAclBinding> matchedBindings = auth.aclMap.get(expResourceType)
+            List<CustomAclBinding> matchedBindings = auth.predelegationAclMap.get(expResourceType)
                     .stream()
                     .filter(binding -> binding.pattern().resourceType() == expResourceType)
                     .filter(binding -> binding.pattern().name().equals(expResourceName))
