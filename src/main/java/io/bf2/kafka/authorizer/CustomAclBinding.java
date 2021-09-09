@@ -16,10 +16,8 @@ import org.apache.kafka.common.utils.SecurityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -37,7 +35,9 @@ class CustomAclBinding extends AclBinding {
     static final String DEFAULT = "default";
     static final String PRINCIPAL = "principal";
     static final String OPERATIONS = "operations";
+    static final String OPERATIONS_EXCEPT = "operations-except";
     static final String APIS = "apis";
+    static final String APIS_EXCEPT = "apis-except";
     static final String LISTENERS = "listeners";
     static final String PERMISSION = "permission";
     static final String WILDCARD = "*";
@@ -45,24 +45,24 @@ class CustomAclBinding extends AclBinding {
     private final Pattern resourceNamePattern;
     private final KafkaPrincipal principal;
     private final Pattern listenerPattern;
-    private final Set<ApiKeys> apiKeys;
-    private final boolean defaultBinding;
 
-    public static List<CustomAclBinding> valueOf(String configuration) {
+    public static List<AclBinding> valueOf(String configuration) {
         boolean defaultBinding = false;
         ResourcePattern resourcePattern = null;
-        String principal = WILDCARD;
-        AclPermissionType permissionType = AclPermissionType.ALLOW;
-        List<AclOperation> operations = new ArrayList<>();
+        String principal = USER_TYPE_PREFIX + WILDCARD;
+        AclPermissionType permission = AclPermissionType.ALLOW;
+        Set<AclOperation> operations = Collections.singleton(AclOperation.ALL);
+        boolean operationsExcluded = false;
         String listeners = WILDCARD;
-        Set<ApiKeys> apiKeys = EnumSet.noneOf(ApiKeys.class);
+        Set<ApiKeys> apis = Collections.emptySet();
+        boolean apisExcluded = false;
         StringTokenizer st = new StringTokenizer(configuration, ";");
 
         while (st.hasMoreTokens()) {
             String token = st.nextToken();
             int idx = token.indexOf('=');
             String k = token.substring(0, idx).toLowerCase();
-            String v = token.substring(idx+1).trim();
+            String v = token.substring(idx + 1).trim();
 
             switch (k) {
             case DEFAULT:
@@ -70,24 +70,27 @@ class CustomAclBinding extends AclBinding {
                 break;
 
             case PRINCIPAL:
-                principal = v;
+                principal = preparePrincipal(v);
                 break;
 
             case OPERATIONS:
-                splitOnComma(v).stream()
-                    .map(AclOperation::fromString)
-                    .filter(operation -> {
-                        validate("Operation type '" + v + "'", operation, AclOperation.UNKNOWN, AclOperation.ANY);
-                        return true;
-                    })
-                    .forEach(operations::add);
+                operations = parseOperations(v, AclOperation.UNKNOWN, AclOperation.ANY);
+                operationsExcluded = false;
+                break;
+
+            case OPERATIONS_EXCEPT:
+                operations = parseOperations(v, AclOperation.UNKNOWN, AclOperation.ANY, AclOperation.ALL);
+                operationsExcluded = true;
                 break;
 
             case APIS:
-                splitOnComma(v).stream()
-                    .map(String::toUpperCase)
-                    .map(ApiKeys::valueOf)
-                    .forEach(apiKeys::add);
+                apis = parseApiKeys(v);
+                apisExcluded = false;
+                break;
+
+            case APIS_EXCEPT:
+                apis = parseApiKeys(v);
+                apisExcluded = true;
                 break;
 
             case LISTENERS:
@@ -95,8 +98,8 @@ class CustomAclBinding extends AclBinding {
                 break;
 
             case PERMISSION:
-                permissionType = AclPermissionType.fromString(v);
-                validate("Permission Type '" + v + "'", permissionType, AclPermissionType.UNKNOWN, AclPermissionType.ANY);
+                permission = AclPermissionType.fromString(v);
+                validate("Permission type '" + v + "'", permission, AclPermissionType.UNKNOWN, AclPermissionType.ANY);
                 break;
 
             default:
@@ -114,7 +117,60 @@ class CustomAclBinding extends AclBinding {
             throw new IllegalArgumentException("ACL configuration missing resource type: '" + configuration + "'");
         }
 
-        return buildBindings(operations, principal, resourcePattern, listeners, apiKeys, permissionType, defaultBinding);
+        if (!defaultBinding) {
+            var entry = new ApiAwareAccessControlEntry(principal, WILDCARD, operations, operationsExcluded, apis, apisExcluded, permission);
+            return Collections.singletonList(new CustomAclBinding(resourcePattern, entry, listeners));
+        }
+
+        if (!apis.isEmpty()) {
+            log.warn("APIs specified for default binding will be ignored by Kafka ACL processor: {}", configuration);
+        }
+
+        if (!WILDCARD.equals(listeners)) {
+            log.warn("Listeners specified for default binding will be ignored by Kafka ACL processor: {}", configuration);
+        }
+
+        if (operationsExcluded) {
+            throw new IllegalArgumentException("Default ACL binding may not list '" + OPERATIONS_EXCEPT + "' : '" + configuration + "'");
+        }
+
+        if (apisExcluded) {
+            throw new IllegalArgumentException("Default ACL binding may not list '" + APIS_EXCEPT + "' : '" + configuration + "'");
+        }
+
+        String bindingPrincipal = principal;
+        AclPermissionType permissionType = permission;
+        ResourcePattern pattern = resourcePattern;
+
+        return operations.stream()
+                .map(operation -> new AccessControlEntry(bindingPrincipal, WILDCARD, operation, permissionType))
+                .map(entry -> new AclBinding(pattern, entry))
+                .collect(Collectors.toList());
+    }
+
+    static String preparePrincipal(String principal) {
+        if (principal.startsWith(USER_TYPE_PREFIX)) {
+            return principal;
+        }
+
+        return USER_TYPE_PREFIX + principal;
+    }
+
+    static Set<AclOperation> parseOperations(String value, AclOperation... disallowedValues) {
+        return splitOnComma(value).stream()
+            .map(AclOperation::fromString)
+            .filter(operation -> {
+                validate("Operation type '" + value + "'", operation, (Object[]) disallowedValues);
+                return true;
+            })
+            .collect(Collectors.toSet());
+    }
+
+    static Set<ApiKeys> parseApiKeys(String value) {
+        return splitOnComma(value).stream()
+            .map(String::toUpperCase)
+            .map(ApiKeys::valueOf)
+            .collect(Collectors.toSet());
     }
 
     static List<String> splitOnComma(String value) {
@@ -132,36 +188,12 @@ class CustomAclBinding extends AclBinding {
         }
     }
 
-    static List<CustomAclBinding> buildBindings(List<AclOperation> operations,
-            String principal,
-            ResourcePattern resource,
-            String listeners,
-            Set<ApiKeys> apiKeys,
-            AclPermissionType permission,
-            boolean defaultBinding) {
-
-        final String bindingPrincipal;
-
-        if (!principal.startsWith(USER_TYPE_PREFIX)) {
-            bindingPrincipal = USER_TYPE_PREFIX + principal;
-        } else {
-            bindingPrincipal = principal;
-        }
-
-        return operations.stream()
-            .map(operation -> new AccessControlEntry(bindingPrincipal, WILDCARD, operation, permission))
-            .map(entry -> new CustomAclBinding(resource, entry, listeners, apiKeys, defaultBinding))
-            .collect(Collectors.toList());
-    }
-
-    CustomAclBinding(ResourcePattern resource, AccessControlEntry entry, String listeners, Set<ApiKeys> apiKeys, boolean defaultBinding) {
+    CustomAclBinding(ResourcePattern resource, ApiAwareAccessControlEntry entry, String listeners) {
         super(resource, entry);
 
         this.resourceNamePattern = resourceNamePattern(resource);
         this.principal = SecurityUtils.parseKafkaPrincipal(entry.principal());
         this.listenerPattern = parse(listeners);
-        this.apiKeys = apiKeys.isEmpty() ? Collections.emptySet() : EnumSet.copyOf(apiKeys);
-        this.defaultBinding = defaultBinding;
     }
 
     static Pattern resourceNamePattern(ResourcePattern resource) {
@@ -187,10 +219,6 @@ class CustomAclBinding extends AclBinding {
         return Pattern.compile(patternString);
     }
 
-    public boolean isDefaultBinding() {
-        return defaultBinding;
-    }
-
     public boolean matchesResource(String resourceName) {
         return match(() -> resourceNamePattern.matcher(resourceName).matches(), "resource.name", resourceNamePattern.pattern(), resourceName);
     }
@@ -211,8 +239,15 @@ class CustomAclBinding extends AclBinding {
     }
 
     public boolean matchesOperation(AclOperation operation) {
-        AclOperation allowedOperation = entry().operation();
-        return match(() -> Arrays.asList(operation, AclOperation.ALL).contains(allowedOperation), "operation", allowedOperation, operation);
+        String fieldName = "operation";
+        ApiAwareAccessControlEntry entry = (ApiAwareAccessControlEntry) entry();
+        Set<AclOperation> operations = entry.operations();
+
+        if (entry.operationsExcluded()) {
+            return match(() -> !operations.contains(operation), fieldName, operations, operation);
+        }
+
+        return match(() -> operations.contains(AclOperation.ALL) || operations.contains(operation), fieldName, operations, operation);
     }
 
     public boolean matchesListener(String listenerName) {
@@ -220,7 +255,15 @@ class CustomAclBinding extends AclBinding {
     }
 
     public boolean matchesApiKey(int apiKey) {
-        return match(() -> apiKeys.isEmpty() || apiKeys.contains(ApiKeys.forId(apiKey)), "apiKey", apiKeys, apiKey);
+        String fieldName = "apiKey";
+        ApiAwareAccessControlEntry entry = (ApiAwareAccessControlEntry) entry();
+        Set<ApiKeys> apis = entry.apiKeys();
+
+        if (entry.apiKeysExcluded()) {
+            return match(() -> !apis.contains(ApiKeys.forId(apiKey)), fieldName, apis, apiKey);
+        }
+
+        return match(() -> apis.isEmpty() || apis.contains(ApiKeys.forId(apiKey)), fieldName, apis, apiKey);
     }
 
     boolean match(BooleanSupplier matcher, String fieldName, Object bindingValue, Object requestValue) {
@@ -239,14 +282,12 @@ class CustomAclBinding extends AclBinding {
 
     @Override
     public boolean equals(Object o) {
-        return super.equals(o) &&
-                Objects.equals(apiKeys, ((CustomAclBinding) o).apiKeys) &&
-                defaultBinding == ((CustomAclBinding) o).defaultBinding;
+        return super.equals(o) && listenerPattern == ((CustomAclBinding) o).listenerPattern;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), apiKeys, defaultBinding);
+        return Objects.hash(super.hashCode(), listenerPattern);
     }
 
     @Override
@@ -254,7 +295,6 @@ class CustomAclBinding extends AclBinding {
         return "(pattern=" + super.pattern() +
                 ", entry=" + super.entry() +
                 ", listenerPattern=" + listenerPattern.pattern() +
-                ", apiKeys=" + apiKeys +
-                ", defaultBinding=" + defaultBinding + ")";
+                ")";
     }
 }

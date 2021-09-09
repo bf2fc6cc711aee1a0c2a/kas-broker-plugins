@@ -75,9 +75,9 @@ class CustomAclAuthorizerTest {
 
     @Test
     void testConfigureTallyLoaded() throws IOException {
+        final int expected = 11;
         /*
-         * Verifies that the operations are unwrapped to create individual ACL records and that
-         * there are no equals/hashCode collisions.
+         * Verifies that all records loaded and that there are no equals/hashCode collisions.
          */
         try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
             auth.configure(config);
@@ -87,7 +87,11 @@ class CustomAclAuthorizerTest {
                 .flatMap(List::stream)
                 .collect(Collectors.toCollection(HashSet::new));
 
-            assertEquals(20, uniqueBindings.size());
+            assertEquals(expected, uniqueBindings.size());
+
+            for (CustomAclBinding binding : uniqueBindings) {
+                assertEquals(expected - 1, uniqueBindings.stream().filter(b -> !binding.equals(b)).count());
+            }
         }
     }
 
@@ -118,7 +122,7 @@ class CustomAclAuthorizerTest {
                     .stream()
                     .filter(binding -> binding.pattern().resourceType() == expResourceType)
                     .filter(binding -> binding.pattern().name().equals(expResourceName))
-                    .filter(binding -> binding.entry().operation().equals(expOperation))
+                    .filter(binding -> binding.matchesOperation(expOperation))
                     .filter(binding -> binding.entry().permissionType().equals(expPermission))
                     .filter(binding -> binding.matchesListener(expListener))
                     .filter(binding -> binding.matchesPrincipal(expPrincipal))
@@ -143,18 +147,28 @@ class CustomAclAuthorizerTest {
 
     @ParameterizedTest
     @CsvSource({
-        "Test user `any` ALLOWED READ TOPIC `foo` on external listener,   User:any,   external-9024://127.0.0.1:9024, READ,   TOPIC,   foo, ALLOWED",
-        "Test user `any` DENIED DELETE TOPIC `foo` on external listener,  User:any,   external-9024://127.0.0.1:9024, DELETE, TOPIC,   foo, DENIED",
-        "Test user `any` ALLOWED READ TOPIC `xyz` on external listener,   User:any,   external-9024://127.0.0.1:9024, READ,   TOPIC,   xyz, ALLOWED",
-        "Test user `any` DENIED WRITE TOPIC `xyz` on external listener,   User:any,   external-9024://127.0.0.1:9024, WRITE,  TOPIC,   xyz, DENIED",
-        "Test user `any` ALLOWED READ TOPIC `abc1` on external listener,  User:any,   external-9024://127.0.0.1:9024, READ,   TOPIC,  abc1, ALLOWED",
-        "Test user `any` ALLOWED WRITE TOPIC `abc2` on external listener, User:any,   external-9024://127.0.0.1:9024, WRITE,  TOPIC,  abc2, ALLOWED",
-        "Test user `any` DENIED READ GROUP `xyz` on external listener,    User:any,   external-9024://127.0.0.1:9024, READ,   GROUP,   xyz, DENIED",
-        "Test user `any` DENIED READ CLUSTER `xyz` on external listener,  User:any,   external-9024://127.0.0.1:9024, READ,   CLUSTER, xyz, DENIED",
-        "Test user `admin` ALLOWED READ GROUP `xyz` on external listener, User:admin, external-9024://127.0.0.1:9024, READ,   GROUP,   xyz, ALLOWED",
-        "Test user `any` ALLOWED READ GROUP `abc` on loop listener,       User:any,   loop,                           READ,   GROUP,   abc, ALLOWED",
-        "Test user `any` ALLOWED READ GROUP `abc` on full loop listener,  User:any,   loop-9021://127.0.0.1:9021,     READ,   GROUP,   abc, ALLOWED",
-        "Test user `any` DENIED READ GROUP `abc` on something listener,   User:any,   something,                      READ,   GROUP,   abc, DENIED",
+        "Test user `any` ALLOWED READ TOPIC `foo` on external listener,       User:any,   external-9024://127.0.0.1:9024, READ,     TOPIC,   foo,  0, ALLOWED",
+        "Test user `any` DENIED DELETE TOPIC `foo` on external listener,      User:any,   external-9024://127.0.0.1:9024, DELETE,   TOPIC,   foo,  0, DENIED",
+        "Test user `any` ALLOWED READ TOPIC `xyz` on external listener,       User:any,   external-9024://127.0.0.1:9024, READ,     TOPIC,   xyz,  0, ALLOWED",
+        "Test user `any` DENIED WRITE TOPIC `xyz` on external listener,       User:any,   external-9024://127.0.0.1:9024, WRITE,    TOPIC,   xyz,  0, DENIED",
+        "Test user `any` ALLOWED READ TOPIC `abc1` on external listener,      User:any,   external-9024://127.0.0.1:9024, READ,     TOPIC,  abc1,  0, ALLOWED",
+        "Test user `any` ALLOWED WRITE TOPIC `abc2` on external listener,     User:any,   external-9024://127.0.0.1:9024, WRITE,    TOPIC,  abc2,  0, ALLOWED",
+        "Test user `any` DENIED READ GROUP `xyz` on external listener,        User:any,   external-9024://127.0.0.1:9024, READ,     GROUP,   xyz,  0, DENIED",
+        "Test user `any` DENIED READ CLUSTER `xyz` on external listener,      User:any,   external-9024://127.0.0.1:9024, READ,     CLUSTER, xyz,  0, DENIED",
+        "Test user `admin` ALLOWED READ GROUP `xyz` on external listener,     User:admin, external-9024://127.0.0.1:9024, READ,     GROUP,   xyz,  0, ALLOWED",
+        "Test user `any` ALLOWED READ GROUP `abc` on loop listener,           User:any,   loop,                           READ,     GROUP,   abc,  0, ALLOWED",
+        "Test user `any` ALLOWED READ GROUP `abc` on full loop listener,      User:any,   loop-9021://127.0.0.1:9021,     READ,     GROUP,   abc,  0, ALLOWED",
+        "Test user `any` DENIED READ GROUP `abc` on something listener,       User:any,   something,                      READ,     GROUP,   abc,  0, DENIED",
+        "Test user `bob` ALLOWED DESCRIBE TOPIC `foo` on external listener,   User:bob,   external-9024://127.0.0.1:9024, DESCRIBE, TOPIC,   foo,  0, ALLOWED",
+        "Test user `bob` DENIED READ TOPIC `foo` on external listener,        User:bob,   external-9024://127.0.0.1:9024, READ,     TOPIC,   foo,  0, DENIED",
+        // 23: OffsetForLeaderEpoch
+        "Test user `alice` DENIED DESCRIBE(23) TOPIC `baa` on external listener, User:alice, external-9024://127.0.0.1:9024, DESCRIBE, TOPIC,   baa, 23, DENIED",
+        // 2: ListOffsets
+        "Test user `alice` ALLOWED DESCRIBE(2) TOPIC `baa` on external listener, User:alice, external-9024://127.0.0.1:9024, DESCRIBE, TOPIC,   baa,  2, ALLOWED",
+        // 3: Metadata
+        "Test user `alice` ALLOWED DESCRIBE(3) TOPIC `baa` on external listener, User:alice, external-9024://127.0.0.1:9024, DESCRIBE, TOPIC,   baa,  3, ALLOWED",
+        // 9: OffsetFetch
+        "Test user `alice` ALLOWED DESCRIBE(9) TOPIC `baa` on external listener, User:alice, external-9024://127.0.0.1:9024, DESCRIBE, TOPIC,   baa,  9, ALLOWED",
     })
     void testAuthorize(String title,
             String principal,
@@ -162,6 +176,7 @@ class CustomAclAuthorizerTest {
             AclOperation operation,
             ResourceType resourceType,
             String resourceName,
+            int requestType,
             AuthorizationResult expectedResult) throws IOException {
 
         KafkaPrincipal superUser = SecurityUtils.parseKafkaPrincipal("User:admin");
@@ -175,6 +190,7 @@ class CustomAclAuthorizerTest {
             when(rc.clientAddress()).thenReturn(InetAddress.getLoopbackAddress());
             when(rc.listenerName()).thenReturn(listener);
             when(rc.principal()).thenReturn(new KafkaPrincipal(principalComponents[0], principalComponents[1]));
+            when(rc.requestType()).thenReturn(requestType);
 
             Action action = new Action(operation, new ResourcePattern(resourceType, resourceName, PatternType.LITERAL), 0, true, true);
             List<AuthorizationResult> results = auth.authorize(rc, Arrays.asList(action));

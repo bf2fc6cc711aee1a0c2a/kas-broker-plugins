@@ -41,7 +41,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
@@ -146,11 +145,15 @@ class CustomAclAuthorizerIT {
 
     @ParameterizedTest
     @CsvFileSource(resources = "/config-invalid-cases.txt", delimiter = '|', lineSeparator = "@\n", nullValues = "-")
-    void testConfigure(String title, String acl) throws IOException {
+    void testConfigureInvalidCases(String title, String acl, String exceptionMsgPrefix) throws IOException {
+        IllegalArgumentException thrown;
+
         try (CustomAclAuthorizer auth = new CustomAclAuthorizer()) {
             Map<String, Object> config = getConfig(acl);
-            assertThrows(IllegalArgumentException.class, () -> auth.configure(config));
+            thrown = assertThrows(IllegalArgumentException.class, () -> auth.configure(config));
         }
+
+        assertTrue(thrown.getMessage().startsWith(exceptionMsgPrefix), () -> "Unexpected message: " + thrown.getMessage());
     }
 
     @ParameterizedTest
@@ -361,15 +364,14 @@ class CustomAclAuthorizerIT {
             auth.configure(config);
 
             var defaultBindings = new ArrayList<AclBinding>();
-            defaultBindings.addAll(CustomAclBinding.valueOf("default=true;permission=allow;topic=pub;operations=all"));
-            defaultBindings.addAll(CustomAclBinding.valueOf("default=true;permission=deny;group=priv;operations=all"));
+            // `apis` dropped by parser
+            defaultBindings.addAll(CustomAclBinding.valueOf("default=true;permission=allow;topic=pub;operations=all;apis=fetch"));
+            // `listeners` dropped by parser
+            defaultBindings.addAll(CustomAclBinding.valueOf("default=true;permission=deny;group=priv;operations=all;listeners=SPECIAL.*"));
 
             // Invalid binding
-            defaultBindings.add(new CustomAclBinding(new ResourcePattern(ResourceType.CLUSTER, "*", PatternType.LITERAL),
-                                                     new AccessControlEntry("User:*", "*", AclOperation.ALL, AclPermissionType.UNKNOWN),
-                                                     "*",
-                                                     Set.of(),
-                                                     true));
+            defaultBindings.add(new AclBinding(new ResourcePattern(ResourceType.CLUSTER, "*", PatternType.LITERAL),
+                                               new AccessControlEntry("User:*", "*", AclOperation.ALL, AclPermissionType.UNKNOWN)));
 
             auth.configureDefaults(defaultBindings);
             assertEquals(2, StreamSupport.stream(auth.acls(AclBindingFilter.ANY).spliterator(), false).count());

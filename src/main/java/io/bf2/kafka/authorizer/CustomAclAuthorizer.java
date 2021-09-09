@@ -180,18 +180,20 @@ public class CustomAclAuthorizer implements Authorizer {
             .map(CustomAclBinding::valueOf)
             .flatMap(List::stream)
             .forEach(binding -> {
-                if (binding.isDefaultBinding()) {
-                    defaultBindings.add(binding);
-                } else {
+                if (binding instanceof CustomAclBinding) {
+                    CustomAclBinding custom = (CustomAclBinding) binding;
+
                     aclMap.compute(binding.pattern().resourceType(), (k, v) -> {
                         List<CustomAclBinding> bindings = Objects.requireNonNullElseGet(v, ArrayList::new);
-                        bindings.add(binding);
+                        bindings.add(custom);
                         return bindings;
                     });
 
-                    if (binding.isPrincipalSpecified()) {
+                    if (custom.isPrincipalSpecified()) {
                         aclPrincipals.add(binding.entry().principal());
                     }
+                } else {
+                    defaultBindings.add(binding);
                 }
             });
 
@@ -258,7 +260,7 @@ public class CustomAclAuthorizer implements Authorizer {
                                      .collect(Collectors.joining(",\n\t")),
                                  error);
                     } else if (log.isInfoEnabled()) {
-                        log.info("ACLs configured in AclAuthorizer:\n\t{}",
+                        log.info("Default ACLs configured in AclAuthorizer:\n\t{}",
                                  bindingsConfigured.stream()
                                      .map(Object::toString)
                                      .collect(Collectors.joining(",\n\t")));
