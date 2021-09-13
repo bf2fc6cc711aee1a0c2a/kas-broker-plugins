@@ -22,3 +22,11 @@ Invalid apis-except configuration (not allowed for default binding)
     | permission=deny;principal=user1;topic=*;apis-except=fetch;default=true
     | Default ACL binding may not list 'apis-except'
     @
+Duplicate operation options
+    | permission=allow;principal=user1;topic=*;operations=all;operations-except=read
+    | Duplicate ACL binding option specified: operations/operations-except
+    @
+Duplicate API options
+    | permission=allow;principal=user1;topic=*;apis=fetch;apis-except=fetch
+    | Duplicate ACL binding option specified: apis/apis-except
+    @

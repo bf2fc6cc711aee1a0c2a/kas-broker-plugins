@@ -23,6 +23,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -47,14 +48,14 @@ class CustomAclBinding extends AclBinding {
     private final Pattern listenerPattern;
 
     public static List<AclBinding> valueOf(String configuration) {
-        boolean defaultBinding = false;
+        Boolean defaultBinding = null;
         ResourcePattern resourcePattern = null;
-        String principal = USER_TYPE_PREFIX + WILDCARD;
-        AclPermissionType permission = AclPermissionType.ALLOW;
-        Set<AclOperation> operations = Collections.singleton(AclOperation.ALL);
+        String principal = null;
+        AclPermissionType permission = null;
+        Set<AclOperation> operations = null;
         boolean operationsExcluded = false;
-        String listeners = WILDCARD;
-        Set<ApiKeys> apis = Collections.emptySet();
+        String listeners = null;
+        Set<ApiKeys> apis = null;
         boolean apisExcluded = false;
         StringTokenizer st = new StringTokenizer(configuration, ";");
 
@@ -66,49 +67,53 @@ class CustomAclBinding extends AclBinding {
 
             switch (k) {
             case DEFAULT:
+                requireNull(defaultBinding, DEFAULT);
                 defaultBinding = Boolean.valueOf(v);
                 break;
 
             case PRINCIPAL:
+                requireNull(principal, PRINCIPAL);
                 principal = preparePrincipal(v);
                 break;
 
             case OPERATIONS:
+                requireNull(operations, String.format("%s/%s", OPERATIONS, OPERATIONS_EXCEPT));
                 operations = parseOperations(v, AclOperation.UNKNOWN, AclOperation.ANY);
                 operationsExcluded = false;
                 break;
 
             case OPERATIONS_EXCEPT:
+                requireNull(operations, String.format("%s/%s", OPERATIONS, OPERATIONS_EXCEPT));
                 operations = parseOperations(v, AclOperation.UNKNOWN, AclOperation.ANY, AclOperation.ALL);
                 operationsExcluded = true;
                 break;
 
             case APIS:
+                requireNull(apis, String.format("%s/%s", APIS, APIS_EXCEPT));
                 apis = parseApiKeys(v);
                 apisExcluded = false;
                 break;
 
             case APIS_EXCEPT:
+                requireNull(apis, String.format("%s/%s", APIS, APIS_EXCEPT));
                 apis = parseApiKeys(v);
                 apisExcluded = true;
                 break;
 
             case LISTENERS:
+                requireNull(listeners, LISTENERS);
                 listeners = v;
                 break;
 
             case PERMISSION:
+                requireNull(permission, PERMISSION);
                 permission = AclPermissionType.fromString(v);
                 validate("Permission type '" + v + "'", permission, AclPermissionType.UNKNOWN, AclPermissionType.ANY);
                 break;
 
             default:
-                ResourceType type = ResourceType.fromString(k);
-                validate("Resource type '" + k + "'", type, ResourceType.UNKNOWN);
-                boolean usesGlob = v.length() > 1 && v.endsWith("*");
-                PatternType patternType = usesGlob ? PatternType.PREFIXED : PatternType.LITERAL;
-                String name = usesGlob ? v.substring(0, v.length() - 1) : v; //Remove the glob, replaced with PREFIXED PatternType
-                resourcePattern = new ResourcePattern(type, name, patternType);
+                requireNull(resourcePattern, "resource type (" + v + ")");
+                resourcePattern = parseResourcePattern(k, v);
                 break;
             }
         }
@@ -117,7 +122,13 @@ class CustomAclBinding extends AclBinding {
             throw new IllegalArgumentException("ACL configuration missing resource type: '" + configuration + "'");
         }
 
-        if (!defaultBinding) {
+        principal = value(principal, () -> USER_TYPE_PREFIX + WILDCARD);
+        permission = value(permission, () -> AclPermissionType.ALLOW);
+        operations = value(operations, () -> Collections.singleton(AclOperation.ALL));
+        listeners = value(listeners, () -> WILDCARD);
+        apis = value(apis, Collections::emptySet);
+
+        if (Boolean.FALSE.equals(value(defaultBinding, () -> Boolean.FALSE))) {
             var entry = new ApiAwareAccessControlEntry(principal, WILDCARD, operations, operationsExcluded, apis, apisExcluded, permission);
             return Collections.singletonList(new CustomAclBinding(resourcePattern, entry, listeners));
         }
@@ -146,6 +157,12 @@ class CustomAclBinding extends AclBinding {
                 .map(operation -> new AccessControlEntry(bindingPrincipal, WILDCARD, operation, permissionType))
                 .map(entry -> new AclBinding(pattern, entry))
                 .collect(Collectors.toList());
+    }
+
+    static <T> void requireNull(T value, String label) {
+        if (value != null) {
+            throw new IllegalArgumentException("Duplicate ACL binding option specified: " + label);
+        }
     }
 
     static String preparePrincipal(String principal) {
@@ -180,12 +197,25 @@ class CustomAclBinding extends AclBinding {
         return Arrays.asList(value.split("\\s*,\\s*"));
     }
 
+    static ResourcePattern parseResourcePattern(String typeName, String value) {
+        ResourceType type = ResourceType.fromString(typeName);
+        validate("Resource type '" + typeName + "'", type, ResourceType.UNKNOWN);
+        boolean usesGlob = value.length() > 1 && value.endsWith(WILDCARD);
+        PatternType patternType = usesGlob ? PatternType.PREFIXED : PatternType.LITERAL;
+        String name = usesGlob ? value.substring(0, value.length() - 1) : value; //Remove the glob, replaced with PREFIXED PatternType
+        return new ResourcePattern(type, name, patternType);
+    }
+
     static void validate(String label, Object value, Object... disallowedValues) {
         for (Object disallowed : disallowedValues) {
             if (value == disallowed) {
                 throw new IllegalArgumentException(label + " is invalid or not supported");
             }
         }
+    }
+
+    static <T> T value(T value, Supplier<T> defaultValue) {
+        return value != null ? value : defaultValue.get();
     }
 
     CustomAclBinding(ResourcePattern resource, ApiAwareAccessControlEntry entry, String listeners) {
