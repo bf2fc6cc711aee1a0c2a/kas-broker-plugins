@@ -38,6 +38,16 @@ user1 allowed describe ListOffsets only
     | EXTERNAL-9094://127.0.0.1:9094
     | ALLOWED
     @
+user1 allowed (permission defaulted) describe ListOffsets only
+    | principal=user1;topic=__private_topic1;operations=describe;apis=LIST_OFFSETS
+    | user1
+    | DESCRIBE
+    | LIST_OFFSETS
+    | TOPIC
+    | __private_topic1
+    | EXTERNAL-9094://127.0.0.1:9094
+    | ALLOWED
+    @
 user1 denied describe METADATA
     | permission=allow;principal=user1;topic=__private_topic1;operations=describe;apis=LIST_OFFSETS
     | user1

@@ -1,9 +1,32 @@
 Missing resource type configuration
     | permission=allow;principal=user1;operations=read,write
+    | ACL configuration missing resource type
     @
 Invalid permission configuration
     | permission=any;principal=user1;operations=read,write
+    | Permission type 'any' is invalid or not supported
     @
 Invalid operation configuration
     | permission=allow;principal=user1;operations=any
+    | Operation type 'any' is invalid or not supported
+    @
+Invalid operations-except configuration (all not allowed)
+    | permission=allow;principal=user1;topic=*;operations-except=all
+    | Operation type 'all' is invalid or not supported
+    @
+Invalid operations-except configuration (not allowed for default binding)
+    | permission=deny;principal=user1;topic=*;operations-except=describe;default=true
+    | Default ACL binding may not list 'operations-except'
+    @
+Invalid apis-except configuration (not allowed for default binding)
+    | permission=deny;principal=user1;topic=*;apis-except=fetch;default=true
+    | Default ACL binding may not list 'apis-except'
+    @
+Duplicate operation options
+    | permission=allow;principal=user1;topic=*;operations=all;operations-except=read
+    | Duplicate ACL binding option specified: operations/operations-except
+    @
+Duplicate API options
+    | permission=allow;principal=user1;topic=*;apis=fetch;apis-except=fetch
+    | Duplicate ACL binding option specified: apis/apis-except
     @
