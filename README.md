@@ -1,8 +1,8 @@
 # Kafka-Group-Authorizer
 
-A authorizer for Strimzi Kafka Operator that can configure ACLs for all users of the cluster with single ACL policy. 
+A authorizer for Strimzi Kafka Operator that can configure ACLs for all users of the cluster with single ACL policy.
 
-The objective is to use this Authorizer with Strimzi Operator when User Operator is not being used to configure a custom Authorizer that can apply to all the users in the kafka cluster. There is provision to configure `superUser` to allow any administrative work. 
+The objective is to use this Authorizer with Strimzi Operator when User Operator is not being used to configure a custom Authorizer that can apply to all the users in the kafka cluster. There is provision to configure `superUser` to allow any administrative work.
 
 The Authorizer class and the ACLs for any resource will be defined using Strimzi's Kafka CR. A sample CR fragment looks like
 
@@ -11,19 +11,19 @@ kafka:
   spec:
     authorization:
       type: custom
-      authorizerClass: io.bf2.kafka.authorizer.GlobalAclAuthorizer
+      authorizerClass: io.bf2.kafka.authorizer.CustomAclAuthorizer
       superUsers:
         - CN=sre_user
     config:
-      strimzi.authorization.global-authorizer.allowed-listeners=plain-9092,canary-9096
-      strimzi.authorization.global-authorizer.acl.1: permission=allow;topic=foo;operations=read,write,create
-      strimzi.authorization.global-authorizer.acl.2: permission=allow;topic=*;operations=read
-      strimzi.authorization.global-authorizer.acl.3: permission=deny;group=xyz;operations=read,create      
+      strimzi.authorization.custom-authorizer.allowed-listeners=plain-9092,canary-9096
+      strimzi.authorization.custom-authorizer.acl.1: permission=allow;topic=foo;operations=read,write,create
+      strimzi.authorization.custom-authorizer.acl.2: permission=allow;topic=*;operations=read
+      strimzi.authorization.custom-authorizer.acl.3: permission=deny;group=xyz;operations=read,create
 ```
 
 "allowed-listeners" defines list of listener names separated by comma(,) which are treated as super user access, any user that made a request using one of this listeners those requests will always be allowed.
 
-Where one could define properties prefixed with “acl.” and incrementing counter to define any number of ACL permissions. Each line would define a single rule for one type of resource. The syntax is a simple key/value pair separated by semicolon(;).  
+Where one could define properties prefixed with “acl.” and incrementing counter to define any number of ACL permissions. Each line would define a single rule for one type of resource. The syntax is a simple key/value pair separated by semicolon(;).
 
 “permission”, resource-type and “operations” are defined as recognized keys
 

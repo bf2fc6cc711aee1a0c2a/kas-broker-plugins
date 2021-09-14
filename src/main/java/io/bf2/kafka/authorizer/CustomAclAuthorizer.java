@@ -65,12 +65,16 @@ import java.util.stream.IntStream;
  *   <code>*</code> may be used to match any resource of the associated type. If
  *   the resource name is not a single wildcard (<code>*</code>) and ends with an
  *   asterisk/glob, the type of pattern is considered to be
- *   {@link PatternType.PREFIXED PREFIXED}, otherwise it is considered to be
- *   {@link PatternType.LITERAL LITERAL}
+ *   {@link PatternType#PREFIXED PREFIXED}, otherwise it is considered to be
+ *   {@link PatternType#LITERAL LITERAL}
  * <li><code>operations</code> - comma-delimited list of operations for the
- *   ACL binding. See {@link AclOperation} for the enumeration names. <em>Required</em>
+ *   ACL binding. See {@link AclOperation} for the enumeration names.
+ * <li><code>operations-except</code> - comma-delimited list of operations that do
+ *   not apply for the ACL binding. See {@link AclOperation} for the enumeration names.
  * <li><code>apis</code> - comma-delimited list of APIs to further focus the ACL
  *   binding. See {@link ApiKeys} for the enumeration names.
+ * <li><code>apis-except</code> - comma-delimited list of excluded APIs to further
+ *   focus the ACL binding. See {@link ApiKeys} for the enumeration names.
  * <li><code>listeners</code> - a regular expression used to match the listener
  *   name used to make a request. If specified, the ACL will only be used with
  *   requests made via a matching listener.
