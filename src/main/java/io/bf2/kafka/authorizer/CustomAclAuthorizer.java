@@ -319,12 +319,18 @@ public class CustomAclAuthorizer implements Authorizer {
                 .filter(binding -> binding.matchesPrincipal(requestContext.principal()))
                 .filter(binding -> binding.matchesListener(requestContext.listenerName()))
                 .map(this::logCandidate)
-                .sorted(this::denyFirst)
+                .sorted(this::prioritize)
                 .findFirst()
                 .map(binding -> resultFromBinding(requestContext, action, binding));
     }
 
-    int denyFirst(AclBinding b1, AclBinding b2) {
+    int prioritize(CustomAclBinding b1, CustomAclBinding b2) {
+        int priorityComparison = Integer.compare(b1.getPriority(), b2.getPriority());
+
+        if (priorityComparison != 0) {
+            return priorityComparison;
+        }
+
         AclPermissionType p1 = b1.entry().permissionType();
         AclPermissionType p2 = b2.entry().permissionType();
 
@@ -335,7 +341,7 @@ public class CustomAclAuthorizer implements Authorizer {
         return p1 == AclPermissionType.DENY ? -1 : 1;
     }
 
-    AclBinding logCandidate(AclBinding binding) {
+    CustomAclBinding logCandidate(CustomAclBinding binding) {
         if (log.isDebugEnabled()) {
             log.debug("Candidate ACL binding: {}", binding);
         }

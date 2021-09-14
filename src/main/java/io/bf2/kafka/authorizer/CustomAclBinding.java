@@ -41,11 +41,13 @@ class CustomAclBinding extends AclBinding {
     static final String APIS_EXCEPT = "apis-except";
     static final String LISTENERS = "listeners";
     static final String PERMISSION = "permission";
+    static final String PRIORITY = "priority";
     static final String WILDCARD = "*";
 
     private final Pattern resourceNamePattern;
     private final KafkaPrincipal principal;
     private final Pattern listenerPattern;
+    private final int priority;
 
     public static List<AclBinding> valueOf(String configuration) {
         Boolean defaultBinding = null;
@@ -57,6 +59,7 @@ class CustomAclBinding extends AclBinding {
         String listeners = null;
         Set<ApiKeys> apis = null;
         boolean apisExcluded = false;
+        Integer priority = null;
         StringTokenizer st = new StringTokenizer(configuration, ";");
 
         while (st.hasMoreTokens()) {
@@ -111,6 +114,11 @@ class CustomAclBinding extends AclBinding {
                 validate("Permission type '" + v + "'", permission, AclPermissionType.UNKNOWN, AclPermissionType.ANY);
                 break;
 
+            case PRIORITY:
+                requireNull(priority, PRIORITY);
+                priority = Integer.valueOf(v);
+                break;
+
             default:
                 requireNull(resourcePattern, "resource type (" + v + ")");
                 resourcePattern = parseResourcePattern(k, v);
@@ -127,10 +135,11 @@ class CustomAclBinding extends AclBinding {
         operations = value(operations, () -> Collections.singleton(AclOperation.ALL));
         listeners = value(listeners, () -> WILDCARD);
         apis = value(apis, Collections::emptySet);
+        priority = value(priority, () -> Integer.MAX_VALUE);
 
         if (Boolean.FALSE.equals(value(defaultBinding, () -> Boolean.FALSE))) {
             var entry = new ApiAwareAccessControlEntry(principal, WILDCARD, operations, operationsExcluded, apis, apisExcluded, permission);
-            return Collections.singletonList(new CustomAclBinding(resourcePattern, entry, listeners));
+            return Collections.singletonList(new CustomAclBinding(resourcePattern, entry, listeners, priority));
         }
 
         if (!apis.isEmpty()) {
@@ -218,12 +227,13 @@ class CustomAclBinding extends AclBinding {
         return value != null ? value : defaultValue.get();
     }
 
-    CustomAclBinding(ResourcePattern resource, ApiAwareAccessControlEntry entry, String listeners) {
+    CustomAclBinding(ResourcePattern resource, ApiAwareAccessControlEntry entry, String listeners, int priority) {
         super(resource, entry);
 
         this.resourceNamePattern = resourceNamePattern(resource);
         this.principal = SecurityUtils.parseKafkaPrincipal(entry.principal());
         this.listenerPattern = parse(listeners);
+        this.priority = priority;
     }
 
     static Pattern resourceNamePattern(ResourcePattern resource) {
@@ -247,6 +257,10 @@ class CustomAclBinding extends AclBinding {
             return Pattern.compile(".*");
         }
         return Pattern.compile(patternString);
+    }
+
+    public int getPriority() {
+        return priority;
     }
 
     public boolean matchesResource(String resourceName) {
@@ -312,12 +326,14 @@ class CustomAclBinding extends AclBinding {
 
     @Override
     public boolean equals(Object o) {
-        return super.equals(o) && listenerPattern == ((CustomAclBinding) o).listenerPattern;
+        return super.equals(o)
+                && listenerPattern == ((CustomAclBinding) o).listenerPattern
+                && priority == ((CustomAclBinding) o).priority;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), listenerPattern);
+        return Objects.hash(super.hashCode(), listenerPattern, priority);
     }
 
     @Override
@@ -325,6 +341,7 @@ class CustomAclBinding extends AclBinding {
         return "(pattern=" + super.pattern() +
                 ", entry=" + super.entry() +
                 ", listenerPattern=" + listenerPattern.pattern() +
+                ", priority=" + priority +
                 ")";
     }
 }
