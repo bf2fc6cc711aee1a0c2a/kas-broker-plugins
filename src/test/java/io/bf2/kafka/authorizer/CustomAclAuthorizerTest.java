@@ -75,7 +75,7 @@ class CustomAclAuthorizerTest {
 
     @Test
     void testConfigureTallyLoaded() throws IOException {
-        final int expected = 11;
+        final int expected = 12;
         /*
          * Verifies that all records loaded and that there are no equals/hashCode collisions.
          */

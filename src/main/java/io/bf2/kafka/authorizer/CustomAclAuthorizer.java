@@ -284,11 +284,15 @@ public class CustomAclAuthorizer implements Authorizer {
         // is super user allow any operation
         if (delegate.isSuperUser(requestContext.principal())) {
             if (log.isDebugEnabled()) {
-                log.debug("super.user {} allowed for operation {} on resource {} using listener {}",
-                        requestContext.principal().getName(),
-                        action.operation(),
-                        action.resourcePattern().name(),
-                        requestContext.listenerName());
+                log.debug("super.user {}", buildLogMessage(requestContext, action, true));
+            }
+            return AuthorizationResult.ALLOWED;
+        }
+
+        // if request made on any allowed listeners allow always
+        if (isAllowedListener(requestContext.listenerName())) {
+            if (log.isDebugEnabled()) {
+                log.debug("allowed listener {}", buildLogMessage(requestContext, action, true));
             }
             return AuthorizationResult.ALLOWED;
         }
@@ -363,18 +367,6 @@ public class CustomAclAuthorizer implements Authorizer {
         if (principalConfigured) {
             logAuditMessage(requestContext, action, false);
             return AuthorizationResult.DENIED;
-        }
-
-        // if request made on any allowed listeners allow always
-        if (isAllowedListener(requestContext.listenerName())) {
-            if (log.isDebugEnabled()) {
-                log.debug("listener {} allowed for operation {} on resource {} using listener {}",
-                        requestContext.listenerName(),
-                        action.operation(),
-                        action.resourcePattern().name(),
-                        requestContext.listenerName());
-            }
-            return AuthorizationResult.ALLOWED;
         }
 
         // Indeterminate result - delegate to default ACL handling
