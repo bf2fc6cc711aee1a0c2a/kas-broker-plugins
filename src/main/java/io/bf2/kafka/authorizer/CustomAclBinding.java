@@ -327,6 +327,7 @@ class CustomAclBinding extends AclBinding {
     @Override
     public boolean equals(Object o) {
         return super.equals(o)
+                && getClass() == o.getClass()
                 && listenerPattern == ((CustomAclBinding) o).listenerPattern
                 && priority == ((CustomAclBinding) o).priority;
     }
