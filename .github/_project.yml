@@ -1,0 +1,4 @@
+name: group-authorizer
+release:
+  current-version: 2.0.0
+  next-version: 2.0.1-SNAPSHOT
