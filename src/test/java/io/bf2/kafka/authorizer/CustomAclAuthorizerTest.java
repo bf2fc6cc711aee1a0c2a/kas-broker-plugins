@@ -75,7 +75,7 @@ class CustomAclAuthorizerTest {
 
     @Test
     void testConfigureTallyLoaded() throws IOException {
-        final int expected = 12;
+        final int expected = 13;
         /*
          * Verifies that all records loaded and that there are no equals/hashCode collisions.
          */
@@ -155,6 +155,7 @@ class CustomAclAuthorizerTest {
         "Test user `any` ALLOWED WRITE TOPIC `abc2` on external listener,     User:any,   external-9024://127.0.0.1:9024, WRITE,    TOPIC,  abc2,  0, ALLOWED",
         "Test user `any` DENIED READ GROUP `xyz` on external listener,        User:any,   external-9024://127.0.0.1:9024, READ,     GROUP,   xyz,  0, DENIED",
         "Test user `any` DENIED READ CLUSTER `xyz` on external listener,      User:any,   external-9024://127.0.0.1:9024, READ,     CLUSTER, xyz,  0, DENIED",
+        "Test user `alice` ALLOWED READ CLUSTER `xyz` on external listener,   User:alice, external-9024://127.0.0.1:9024, READ,     CLUSTER, xyz,  0, ALLOWED",
         "Test user `admin` ALLOWED READ GROUP `xyz` on external listener,     User:admin, external-9024://127.0.0.1:9024, READ,     GROUP,   xyz,  0, ALLOWED",
         "Test user `any` ALLOWED READ GROUP `abc` on loop listener,           User:any,   loop,                           READ,     GROUP,   abc,  0, ALLOWED",
         "Test user `any` ALLOWED READ GROUP `abc` on full loop listener,      User:any,   loop-9021://127.0.0.1:9021,     READ,     GROUP,   abc,  0, ALLOWED",
