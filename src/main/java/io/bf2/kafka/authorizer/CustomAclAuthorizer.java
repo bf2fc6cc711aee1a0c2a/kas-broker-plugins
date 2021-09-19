@@ -162,7 +162,7 @@ public class CustomAclAuthorizer implements Authorizer {
 
         if (configs.containsKey(RESOURCE_OPERATIONS_KEY)) {
             ObjectMapper mapper = new ObjectMapper();
-            TypeReference<HashMap<String, List<String>>> typeRef = new TypeReference<HashMap<String, List<String>>>() {};
+            TypeReference<HashMap<String, List<String>>> typeRef = new TypeReference<>() {};
 
             try {
                 allowedAcls.putAll(mapper.readValue(String.valueOf(configs.get(RESOURCE_OPERATIONS_KEY)), typeRef));
@@ -380,7 +380,9 @@ public class CustomAclAuthorizer implements Authorizer {
         }
 
         // Indeterminate result - delegate to default ACL handling
-        return delegate.authorize(requestContext, List.of(action)).get(0);
+        AuthorizationResult result = delegate.authorize(requestContext, List.of(action)).get(0);
+        logAuditMessage(requestContext, action, AuthorizationResult.ALLOWED.equals(result));
+        return result;
     }
 
     boolean hasPrincipalBindings(String principalName) {
