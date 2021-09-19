@@ -287,16 +287,16 @@ public class CustomAclAuthorizer implements Authorizer {
     private AuthorizationResult authorizeAction(AuthorizableRequestContext requestContext, Action action) {
         // is super user allow any operation
         if (delegate.isSuperUser(requestContext.principal())) {
-            if (log.isDebugEnabled()) {
-                log.debug("super.user {}", buildLogMessage(requestContext, action, true));
+            if (log.isInfoEnabled()) {
+                log.info("super.user {}", buildLogMessage(requestContext, action, true));
             }
             return AuthorizationResult.ALLOWED;
         }
 
         // if request made on any allowed listeners allow always
         if (isAllowedListener(requestContext.listenerName())) {
-            if (log.isDebugEnabled()) {
-                log.debug("allowed listener {}", buildLogMessage(requestContext, action, true));
+            if (log.isInfoEnabled()) {
+                log.info("allowed listener {}", buildLogMessage(requestContext, action, true));
             }
             return AuthorizationResult.ALLOWED;
         }
@@ -400,11 +400,8 @@ public class CustomAclAuthorizer implements Authorizer {
     }
 
     public void logAuditMessage(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
-        if (authorized && action.logIfAllowed()) {
-            if (log.isDebugEnabled()) {
-                log.debug(buildLogMessage(requestContext, action, authorized));
-            }
-        } else if (!authorized && action.logIfDenied()) {
+        if ((authorized && action.logIfAllowed()) ||
+                (!authorized && action.logIfDenied())) {
             if (log.isInfoEnabled()) {
                 log.info(buildLogMessage(requestContext, action, authorized));
             }
