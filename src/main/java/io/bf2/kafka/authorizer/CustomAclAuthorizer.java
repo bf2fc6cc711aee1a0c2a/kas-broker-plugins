@@ -162,7 +162,7 @@ public class CustomAclAuthorizer implements Authorizer {
 
         if (configs.containsKey(RESOURCE_OPERATIONS_KEY)) {
             ObjectMapper mapper = new ObjectMapper();
-            TypeReference<HashMap<String, List<String>>> typeRef = new TypeReference<HashMap<String, List<String>>>() {};
+            TypeReference<HashMap<String, List<String>>> typeRef = new TypeReference<>() {};
 
             try {
                 allowedAcls.putAll(mapper.readValue(String.valueOf(configs.get(RESOURCE_OPERATIONS_KEY)), typeRef));
@@ -287,16 +287,16 @@ public class CustomAclAuthorizer implements Authorizer {
     private AuthorizationResult authorizeAction(AuthorizableRequestContext requestContext, Action action) {
         // is super user allow any operation
         if (delegate.isSuperUser(requestContext.principal())) {
-            if (log.isDebugEnabled()) {
-                log.debug("super.user {}", buildLogMessage(requestContext, action, true));
+            if (log.isInfoEnabled()) {
+                log.info("super.user {}", buildLogMessage(requestContext, action, true));
             }
             return AuthorizationResult.ALLOWED;
         }
 
         // if request made on any allowed listeners allow always
         if (isAllowedListener(requestContext.listenerName())) {
-            if (log.isDebugEnabled()) {
-                log.debug("allowed listener {}", buildLogMessage(requestContext, action, true));
+            if (log.isInfoEnabled()) {
+                log.info("allowed listener {}", buildLogMessage(requestContext, action, true));
             }
             return AuthorizationResult.ALLOWED;
         }
@@ -380,7 +380,9 @@ public class CustomAclAuthorizer implements Authorizer {
         }
 
         // Indeterminate result - delegate to default ACL handling
-        return delegate.authorize(requestContext, List.of(action)).get(0);
+        AuthorizationResult result = delegate.authorize(requestContext, List.of(action)).get(0);
+        logAuditMessage(requestContext, action, AuthorizationResult.ALLOWED.equals(result));
+        return result;
     }
 
     boolean hasPrincipalBindings(String principalName) {
@@ -398,11 +400,8 @@ public class CustomAclAuthorizer implements Authorizer {
     }
 
     public void logAuditMessage(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
-        if (authorized && action.logIfAllowed()) {
-            if (log.isDebugEnabled()) {
-                log.debug(buildLogMessage(requestContext, action, authorized));
-            }
-        } else if (!authorized && action.logIfDenied()) {
+        if ((authorized && action.logIfAllowed()) ||
+                (!authorized && action.logIfDenied())) {
             if (log.isInfoEnabled()) {
                 log.info(buildLogMessage(requestContext, action, authorized));
             }
