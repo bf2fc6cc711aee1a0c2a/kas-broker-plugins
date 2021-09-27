@@ -7,6 +7,7 @@ import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy;
 
 public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
+    private static final int MINIMUM_ISR_COUNT = 2;
     protected static final String DEFAULT_REPLICATION_FACTOR = "default.replication.factor";
     protected static final String MIN_INSYNC_REPLICAS = "min.insync.replicas";
     private Map<String, ?> configs;
@@ -34,19 +35,25 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
     }
 
     private void validateIsr(RequestMetadata requestMetadata) throws PolicyViolationException {
-        Short defaultIsr =  getConfig(MIN_INSYNC_REPLICAS, configs)
-                .map(v -> Short.valueOf(v.toString()))
-                .orElse((short)2);
+        Short defaultIsr = defaultIsr();
 
-        // only allow isr greater than equal to 2 or up to default
+        // grab the client's isr value if present
         Optional<Short> isr = getConfig(MIN_INSYNC_REPLICAS, requestMetadata.configs())
             .map(c -> Short.valueOf(c.toString()));
 
+        // if not present, cluster default value taken automatically, otherwise
+        // only allow isr greater than equal to 2 or up to default
         if(isr.isPresent()) {
-            if (isr.get() < 2 || isr.get() > defaultIsr) {
-                throw new PolicyViolationException(String.format("Topic %s configured with invalid minimum insync replicas, recommended minimum insync replicas are %d", requestMetadata.topic(), defaultIsr));
+            if (isr.get() < MINIMUM_ISR_COUNT || isr.get() > defaultIsr) {
+                throw new PolicyViolationException(String.format("Topic %s configured with invalid minimum insync replicas %d, recommended minimum insync replicas are %d", requestMetadata.topic(), isr.get(), defaultIsr));
             }
         }
+    }
+
+    private short defaultIsr() {
+        return getConfig(MIN_INSYNC_REPLICAS, configs)
+                .map(v -> Short.valueOf(v.toString()))
+                .orElse((short)2);
     }
 
     private short defaultReplicationFactor() {
