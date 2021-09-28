@@ -7,7 +7,6 @@ import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy;
 
 public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
-    private static final int MINIMUM_ISR_COUNT = 2;
     protected static final String DEFAULT_REPLICATION_FACTOR = "default.replication.factor";
     protected static final String MIN_INSYNC_REPLICAS = "min.insync.replicas";
     private Map<String, ?> configs;
@@ -28,38 +27,41 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
     }
 
     private void validateReplicationFactor(RequestMetadata requestMetadata) throws PolicyViolationException {
+        Optional<Short> defaultReplicationFactor = defaultReplicationFactor();
+
         // only allow replication factor if it matches to default
-        if (requestMetadata.replicationFactor() != null && requestMetadata.replicationFactor() != defaultReplicationFactor()) {
-            throw new PolicyViolationException(String.format("Topic %s configured with invalid replication factor %d, required replication factor is %d", requestMetadata.topic(), requestMetadata.replicationFactor(), defaultReplicationFactor()));
+        if (requestMetadata.replicationFactor() != null
+                && defaultReplicationFactor.isPresent()
+                && !requestMetadata.replicationFactor().equals(defaultReplicationFactor.get())) {
+            throw new PolicyViolationException(String.format("Topic %s configured with invalid replication factor %d, required replication factor is %d", requestMetadata.topic(), requestMetadata.replicationFactor(), defaultReplicationFactor.get()));
         }
     }
 
     private void validateIsr(RequestMetadata requestMetadata) throws PolicyViolationException {
-        Short defaultIsr = defaultIsr();
+        Optional<Short> defaultIsr = defaultIsr();
 
         // grab the client's isr value if present
         Optional<Short> isr = getConfig(MIN_INSYNC_REPLICAS, requestMetadata.configs())
-            .map(c -> Short.valueOf(c.toString()));
+                .map(v -> Short.valueOf(v.toString()));
 
         // if not present, cluster default value taken automatically, otherwise
-        // only allow isr greater than equal to 2 or up to default
-        if(isr.isPresent()) {
-            if (isr.get() < MINIMUM_ISR_COUNT || isr.get() > defaultIsr) {
-                throw new PolicyViolationException(String.format("Topic %s configured with invalid minimum insync replicas %d, recommended minimum insync replicas are %d", requestMetadata.topic(), isr.get(), defaultIsr));
+        // only allow isr if the defined value >= to default isr value configured and <= system replication
+        // factor, as there is no meaning setting this value higher than replication factor.
+        if(isr.isPresent() && defaultIsr.isPresent()) {
+            if (isr.get() < defaultIsr.get() || isr.get() > defaultReplicationFactor().get()) {
+                throw new PolicyViolationException(String.format("Topic %s configured with invalid minimum insync replicas %d, recommended minimum insync replicas are %d", requestMetadata.topic(), isr.get(), defaultIsr.get()));
             }
         }
     }
 
-    private short defaultIsr() {
-        return getConfig(MIN_INSYNC_REPLICAS, configs)
-                .map(v -> Short.valueOf(v.toString()))
-                .orElse((short)2);
+    private Optional<Short> defaultIsr() {
+        return getConfig(MIN_INSYNC_REPLICAS, this.configs)
+                .map(v -> Short.valueOf(v.toString()));
     }
 
-    private short defaultReplicationFactor() {
+    private Optional<Short> defaultReplicationFactor() {
         return getConfig(DEFAULT_REPLICATION_FACTOR, this.configs)
-                .map(c -> Short.valueOf(c.toString()))
-                .orElse(Short.valueOf((short)3));
+                .map(v -> Short.valueOf(v.toString()));
     }
 
     private Optional<Object> getConfig(String name, Map<String, ?> configs){
