@@ -11,7 +11,7 @@
 
     <groupId>io.bf2.kafka</groupId>
     <artifactId>group-authorizer</artifactId>
-    <version>2.1.1-SNAPSHOT</version>
+    <version>2.2.0</version>
 
     <name>strimzi-kafka-group-authorizer</name>
     <description>A Group ACL Authorizer for Strmzi Kafaka</description>
@@ -26,7 +26,7 @@
     <scm>
         <connection>scm:git:git://github.com/bf2fc6cc711aee1a0c2a/kafka-group-authorizer.git</connection>
         <developerConnection>scm:git:git@github.com:bf2fc6cc711aee1a0c2a/kafka-group-authorizer.git</developerConnection>
-        <tag>HEAD</tag>
+        <tag>2.2.0</tag>
     </scm>
 
     <developers>
