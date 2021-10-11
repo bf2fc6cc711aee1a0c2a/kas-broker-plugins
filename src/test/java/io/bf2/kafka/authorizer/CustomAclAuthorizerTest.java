@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mockito;
+import org.slf4j.event.Level;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -270,6 +271,38 @@ class CustomAclAuthorizerTest {
                     .map(Optional::get)
                     .allMatch(e -> e instanceof ApiException
                             && CustomAclAuthorizer.CREATE_ACL_INVALID_BINDING.equals(e.getMessage())));
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "Test log level for unspecified binding is INFO, INFO, IDEMPOTENT_WRITE, OFFSET_COMMIT, CLUSTER, User:test",
+            "Test log level for specified binding is as expected, DEBUG, DESCRIBE, METADATA, TOPIC, User:test",
+            "Test can specify fetch API, TRACE, CLUSTER_ACTION, FETCH, CLUSTER, User:test",
+    })
+    void testGetLogLevel(String title,
+            Level expLevel,
+            String operation,
+            ApiKeys api,
+            ResourceType resourceType,
+            String principalName) throws IOException {
+
+        new KafkaPrincipal(KafkaPrincipal.USER_TYPE, principalName);
+
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
+            auth.configure(config);
+
+            AuthorizableRequestContext rc = Mockito.mock(AuthorizableRequestContext.class);
+            Mockito.when(rc.clientAddress()).thenReturn(InetAddress.getLoopbackAddress());
+            Mockito.when(rc.listenerName()).thenReturn("security-9095");
+            Mockito.when(rc.principal()).thenReturn(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "owner1"));
+            Mockito.when(rc.requestType()).thenReturn((int) api.id);
+
+            Action action = new Action(AclOperation.fromString(operation),
+                    new ResourcePattern(resourceType, "baa", PatternType.LITERAL), 0, true, true);
+
+            assertEquals(2, auth.aclLoggingMap.size());
+            assertEquals(expLevel, auth.logLevelFor(rc, action));
         }
     }
 
