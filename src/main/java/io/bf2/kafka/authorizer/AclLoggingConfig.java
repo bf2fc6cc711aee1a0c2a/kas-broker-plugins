@@ -140,7 +140,14 @@ public class AclLoggingConfig {
     }
 
     static int prioritize(AclLoggingConfig b1, AclLoggingConfig b2) {
-        return Integer.compare(b1.getPriority(), b2.getPriority());
+        int priorityComparison = Integer.compare(b1.getPriority(), b2.getPriority());
+
+        if (priorityComparison != 0) {
+            return priorityComparison;
+        }
+
+        // Inverted sort order, because the int values for Levels go the other way than we want
+        return Integer.compare(b2.getLevel().toInt(), b1.getLevel().toInt());
     }
 
     public Level getLevel() {

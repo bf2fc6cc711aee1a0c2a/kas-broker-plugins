@@ -3,6 +3,11 @@
  */
 package io.bf2.kafka.authorizer;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.when;
+
 import org.apache.kafka.common.acl.AccessControlEntry;
 import org.apache.kafka.common.acl.AclBinding;
 import org.apache.kafka.common.acl.AclBindingFilter;
@@ -40,11 +45,6 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.when;
 
 class CustomAclAuthorizerTest {
 
@@ -276,15 +276,18 @@ class CustomAclAuthorizerTest {
 
     @ParameterizedTest
     @CsvSource({
-            "Test log level for unspecified binding is INFO, INFO, IDEMPOTENT_WRITE, OFFSET_COMMIT, CLUSTER, User:test",
-            "Test log level for specified binding is as expected, DEBUG, DESCRIBE, METADATA, TOPIC, User:test",
-            "Test can specify fetch API, TRACE, CLUSTER_ACTION, FETCH, CLUSTER, User:test",
+            "Test log level for unspecified binding is INFO, INFO, IDEMPOTENT_WRITE, OFFSET_COMMIT, CLUSTER, kafka-cluster, User:test",
+            "Test log level for specified binding is as expected, DEBUG, DESCRIBE, METADATA, TOPIC, myopictopic, User:test",
+            "Test can specify fetch API, TRACE, CLUSTER_ACTION, FETCH, CLUSTER, kafka-cluster, User:test",
+            "Test can turn off some operations per topic, TRACE, DESCRIBE, METADATA, TOPIC, __strimzi_canary, User:canary-something",
+            "Test prioritization considering level, DEBUG, CLISTER_ACTION, ALTER_ISR, CLUSTER, kafka-cluster, User:test",
     })
     void testGetLogLevel(String title,
             Level expLevel,
             String operation,
             ApiKeys api,
             ResourceType resourceType,
+            String resourceName,
             String principalName) throws IOException {
 
         new KafkaPrincipal(KafkaPrincipal.USER_TYPE, principalName);
@@ -299,10 +302,10 @@ class CustomAclAuthorizerTest {
             Mockito.when(rc.requestType()).thenReturn((int) api.id);
 
             Action action = new Action(AclOperation.fromString(operation),
-                    new ResourcePattern(resourceType, "baa", PatternType.LITERAL), 0, true, true);
+                    new ResourcePattern(resourceType, resourceName, PatternType.LITERAL), 0, true, true);
 
-            assertEquals(2, auth.aclLoggingMap.size());
-            assertEquals(expLevel, auth.logLevelFor(rc, action));
+            assertEquals(2, auth.aclLoggingMap.size(), title);
+            assertEquals(expLevel, auth.logLevelFor(rc, action), title);
         }
     }
 
