@@ -227,6 +227,23 @@ class CustomAclBinding extends AclBinding {
         return value != null ? value : defaultValue.get();
     }
 
+    static int prioritize(CustomAclBinding b1, CustomAclBinding b2) {
+        int priorityComparison = Integer.compare(b1.getPriority(), b2.getPriority());
+
+        if (priorityComparison != 0) {
+            return priorityComparison;
+        }
+
+        AclPermissionType p1 = b1.entry().permissionType();
+        AclPermissionType p2 = b2.entry().permissionType();
+
+        if (p1 == p2) {
+            return 0;
+        }
+
+        return p1 == AclPermissionType.DENY ? -1 : 1;
+    }
+
     CustomAclBinding(ResourcePattern resource, ApiAwareAccessControlEntry entry, String listeners, int priority) {
         super(resource, entry);
 

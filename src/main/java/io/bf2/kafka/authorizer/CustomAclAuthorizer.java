@@ -30,6 +30,7 @@ import org.apache.kafka.server.authorizer.Authorizer;
 import org.apache.kafka.server.authorizer.AuthorizerServerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.event.Level;
 
 import java.io.IOException;
 import java.security.Principal;
@@ -46,6 +47,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -121,13 +123,16 @@ public class CustomAclAuthorizer implements Authorizer {
     @Deprecated(forRemoval = true)
     static final String ALLOWED_LISTENERS = CONFIG_PREFIX + "allowed-listeners";
     static final String ACL_PREFIX = CONFIG_PREFIX + "acl.";
+    static final String LOGGING_PREFIX = ACL_PREFIX + "logging.";
     static final Pattern ACL_PATTERN = Pattern.compile(Pattern.quote(ACL_PREFIX) + "\\d+");
+    static final Pattern ACL_LOGGING_PATTERN = Pattern.compile(Pattern.quote(LOGGING_PREFIX) + "\\d+");
 
     static final Map<AclPermissionType, AuthorizationResult> permissionResults = Map.ofEntries(
             Map.entry(AclPermissionType.ALLOW, AuthorizationResult.ALLOWED),
             Map.entry(AclPermissionType.DENY, AuthorizationResult.DENIED));
 
     final Map<ResourceType, List<CustomAclBinding>> aclMap = new EnumMap<>(ResourceType.class);
+    final Map<ResourceType, List<AclLoggingConfig>> aclLoggingMap = new EnumMap<>(ResourceType.class);
     final Map<String, List<String>> allowedAcls = new HashMap<>();
     final Set<String> aclPrincipals = new HashSet<>();
 
@@ -201,6 +206,22 @@ public class CustomAclAuthorizer implements Authorizer {
                 }
             });
 
+        configs.entrySet()
+                .stream()
+                .filter(config -> ACL_LOGGING_PATTERN.matcher(config.getKey()).matches())
+                .map(Map.Entry::getValue)
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .map(AclLoggingConfig::valueOf)
+                .flatMap(List::stream)
+                .forEach(binding -> {
+                    aclLoggingMap.compute(binding.getResourcePattern().resourceType(), (k, v) -> {
+                        List<AclLoggingConfig> bindings = Objects.requireNonNullElseGet(v, ArrayList::new);
+                        bindings.add(binding);
+                        return bindings;
+                    });
+                });
+
         if (log.isInfoEnabled()) {
             log.info("Custom Authorizer ACLs configured:\n\t{}",
                     aclMap.values()
@@ -211,6 +232,50 @@ public class CustomAclAuthorizer implements Authorizer {
         }
 
         configureDefaults(defaultBindings);
+    }
+
+    Level logLevelFor(AuthorizableRequestContext requestContext, Action action) {
+        return aclLoggingMap.getOrDefault(action.resourcePattern().resourceType(), Collections.emptyList())
+                .stream()
+                .filter(binding -> binding.matchesResource(action.resourcePattern().name())
+                        && binding.matchesOperation(action.operation())
+                        && binding.matchesPrincipal(requestContext.principal())
+                        && binding.matchesApiKey(requestContext.requestType())
+                        && binding.matchesListener(requestContext.listenerName()))
+                .sorted(AclLoggingConfig::prioritize)
+                .findFirst()
+                .map(AclLoggingConfig::getLevel)
+                .orElse(Level.INFO);
+    }
+
+    void logAtAllowedLevel(Level lvl, Supplier<String> msg) {
+        switch (lvl) {
+        case ERROR:
+            if (log.isErrorEnabled()) {
+                log.error(msg.get());
+            }
+            break;
+        case WARN:
+            if (log.isWarnEnabled()) {
+                log.warn(msg.get());
+            }
+            break;
+        case INFO:
+            if (log.isInfoEnabled()) {
+                log.info(msg.get());
+            }
+            break;
+        case DEBUG:
+            if (log.isDebugEnabled()) {
+                log.debug(msg.get());
+            }
+            break;
+        case TRACE:
+            if (log.isTraceEnabled()) {
+                log.trace(msg.get());
+            }
+            break;
+        }
     }
 
     /**
@@ -287,17 +352,15 @@ public class CustomAclAuthorizer implements Authorizer {
     private AuthorizationResult authorizeAction(AuthorizableRequestContext requestContext, Action action) {
         // is super user allow any operation
         if (delegate.isSuperUser(requestContext.principal())) {
-            if (log.isInfoEnabled()) {
-                log.info("super.user {}", buildLogMessage(requestContext, action, true));
-            }
+            logAtAllowedLevel(logLevelFor(requestContext, action),
+                    () -> "super.user " + buildLogMessage(requestContext, action, true));
             return AuthorizationResult.ALLOWED;
         }
 
         // if request made on any allowed listeners allow always
         if (isAllowedListener(requestContext.listenerName())) {
-            if (log.isInfoEnabled()) {
-                log.info("allowed listener {}", buildLogMessage(requestContext, action, true));
-            }
+            logAtAllowedLevel(logLevelFor(requestContext, action),
+                    () -> "allowed listener " + buildLogMessage(requestContext, action, true));
             return AuthorizationResult.ALLOWED;
         }
 
@@ -323,26 +386,9 @@ public class CustomAclAuthorizer implements Authorizer {
                 .filter(binding -> binding.matchesPrincipal(requestContext.principal()))
                 .filter(binding -> binding.matchesListener(requestContext.listenerName()))
                 .map(this::logCandidate)
-                .sorted(this::prioritize)
+                .sorted(CustomAclBinding::prioritize)
                 .findFirst()
                 .map(binding -> resultFromBinding(requestContext, action, binding));
-    }
-
-    int prioritize(CustomAclBinding b1, CustomAclBinding b2) {
-        int priorityComparison = Integer.compare(b1.getPriority(), b2.getPriority());
-
-        if (priorityComparison != 0) {
-            return priorityComparison;
-        }
-
-        AclPermissionType p1 = b1.entry().permissionType();
-        AclPermissionType p2 = b2.entry().permissionType();
-
-        if (p1 == p2) {
-            return 0;
-        }
-
-        return p1 == AclPermissionType.DENY ? -1 : 1;
     }
 
     CustomAclBinding logCandidate(CustomAclBinding binding) {
@@ -402,9 +448,8 @@ public class CustomAclAuthorizer implements Authorizer {
     public void logAuditMessage(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
         if ((authorized && action.logIfAllowed()) ||
                 (!authorized && action.logIfDenied())) {
-            if (log.isInfoEnabled()) {
-                log.info(buildLogMessage(requestContext, action, authorized));
-            }
+            logAtAllowedLevel(logLevelFor(requestContext, action),
+                    () -> buildLogMessage(requestContext, action, authorized));
         } else if (log.isTraceEnabled()) {
             log.trace(buildLogMessage(requestContext, action, authorized));
         }
