@@ -49,16 +49,16 @@
         <basepom.check.fail-dependency>false</basepom.check.fail-dependency>
         <basepom.check.skip-dependency-scope>true</basepom.check.skip-dependency-scope>
 
-        <kafka.version>2.7.0</kafka.version>
-        <scala.version>2.12.8</scala.version>
+        <kafka.version>2.8.1</kafka.version>
+        <scala.version>2.12.13</scala.version>
         <junit.version>5.7.1</junit.version>
         <mockito.version>1.10.19</mockito.version>
         <slf4j.version>1.7.30</slf4j.version>
         <jackson-core.version>2.10.5</jackson-core.version>
         <jackson-databind.version>2.10.5.1</jackson-databind.version>
         <guava.version>30.0-jre</guava.version>
-        <zookeeper.version>3.5.8</zookeeper.version>
-        <kafka-junit.version>4.1.11</kafka-junit.version>
+        <zookeeper.version>3.5.9</zookeeper.version>
+        <kafka-junit.version>4.2.0</kafka-junit.version>
     </properties>
 
     <dependencies>
@@ -74,7 +74,7 @@
         </dependency>
         <dependency>
             <groupId>org.apache.kafka</groupId>
-            <artifactId>kafka_2.13</artifactId>
+            <artifactId>kafka_2.12</artifactId>
             <version>${kafka.version}</version>
         </dependency>
         <dependency>
@@ -102,6 +102,10 @@
                 <exclusion>
                     <groupId>org.slf4j</groupId>
                     <artifactId>log4j-over-slf4j</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.kafka</groupId>
+                    <artifactId>kafka_2.13</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -181,6 +185,7 @@
                     <checkTestClasspath>false</checkTestClasspath>
                     <ignoredClassPatterns>
                         <ignoredClassPattern>kafka/kafka-version\.properties</ignoredClassPattern>
+                        <ignoredClassPattern>scala.annotation.nowarn</ignoredClassPattern>
                     </ignoredClassPatterns>
                     <ignoredResourcePatterns>
                         <ignoredResourcePattern>kafka/kafka-version\.properties</ignoredResourcePattern>
