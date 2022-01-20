@@ -6,6 +6,8 @@ package io.bf2.kafka.authorizer;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import kafka.security.authorizer.AclEntry;
 import org.apache.kafka.common.Endpoint;
 import org.apache.kafka.common.acl.AccessControlEntryFilter;
@@ -35,6 +37,7 @@ import org.slf4j.event.Level;
 import java.io.IOException;
 import java.security.Principal;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -46,6 +49,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -135,6 +140,9 @@ public class CustomAclAuthorizer implements Authorizer {
     final Map<ResourceType, List<AclLoggingConfig>> aclLoggingMap = new EnumMap<>(ResourceType.class);
     final Map<String, List<String>> allowedAcls = new HashMap<>();
     final Set<String> aclPrincipals = new HashSet<>();
+
+    final Cache<List<?>, Object> lastLog =
+            CacheBuilder.newBuilder().expireAfterWrite(5, TimeUnit.MINUTES).maximumSize(5000).build();
 
     /**
      * For backward-compatibility with {@link GlobalAclAuthorizer}.
@@ -235,7 +243,7 @@ public class CustomAclAuthorizer implements Authorizer {
     }
 
     Level logLevelFor(AuthorizableRequestContext requestContext, Action action) {
-        return aclLoggingMap.getOrDefault(action.resourcePattern().resourceType(), Collections.emptyList())
+        Level result = aclLoggingMap.getOrDefault(action.resourcePattern().resourceType(), Collections.emptyList())
                 .stream()
                 .filter(binding -> binding.matchesResource(action.resourcePattern().name())
                         && binding.matchesOperation(action.operation())
@@ -246,6 +254,21 @@ public class CustomAclAuthorizer implements Authorizer {
                 .findFirst()
                 .map(AclLoggingConfig::getLevel)
                 .orElse(Level.INFO);
+        // only log fetch/produce at a defined interval
+        if (result == Level.INFO && (requestContext.requestType() == ApiKeys.FETCH.id
+                || requestContext.requestType() == ApiKeys.PRODUCE.id)) {
+            Object ref = new Object();
+            try {
+                Object last = lastLog.get(Arrays.asList(action.resourcePattern().name(), requestContext.principal(),
+                        requestContext.requestType(), requestContext.listenerName()), () -> ref);
+                if (last != ref) {
+                    return Level.DEBUG;
+                }
+            } catch (ExecutionException e) {
+                // not possible
+            }
+        }
+        return result;
     }
 
     void logAtAllowedLevel(Level lvl, Supplier<String> msg) {
