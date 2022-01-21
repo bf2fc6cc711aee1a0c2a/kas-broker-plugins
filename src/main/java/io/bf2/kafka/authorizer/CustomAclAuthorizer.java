@@ -242,7 +242,16 @@ public class CustomAclAuthorizer implements Authorizer {
         configureDefaults(defaultBindings);
     }
 
-    Level logLevelFor(AuthorizableRequestContext requestContext, Action action) {
+    Level logLevelFor(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
+        if (!authorized) {
+            if (!action.logIfDenied()) {
+                return Level.TRACE;
+            }
+            return Level.INFO;
+        }
+        if (!action.logIfAllowed()) {
+            return Level.TRACE;
+        }
         Level result = aclLoggingMap.getOrDefault(action.resourcePattern().resourceType(), Collections.emptyList())
                 .stream()
                 .filter(binding -> binding.matchesResource(action.resourcePattern().name())
@@ -262,7 +271,7 @@ public class CustomAclAuthorizer implements Authorizer {
                 Object last = lastLog.get(Arrays.asList(action.resourcePattern().name(), requestContext.principal(),
                         requestContext.requestType(), requestContext.listenerName()), () -> ref);
                 if (last != ref) {
-                    return Level.DEBUG;
+                    return Level.TRACE;
                 }
             } catch (ExecutionException e) {
                 // not possible
@@ -375,14 +384,14 @@ public class CustomAclAuthorizer implements Authorizer {
     private AuthorizationResult authorizeAction(AuthorizableRequestContext requestContext, Action action) {
         // is super user allow any operation
         if (delegate.isSuperUser(requestContext.principal())) {
-            logAtAllowedLevel(logLevelFor(requestContext, action),
+            logAtAllowedLevel(logLevelFor(requestContext, action, true),
                     () -> "super.user " + buildLogMessage(requestContext, action, true));
             return AuthorizationResult.ALLOWED;
         }
 
         // if request made on any allowed listeners allow always
         if (isAllowedListener(requestContext.listenerName())) {
-            logAtAllowedLevel(logLevelFor(requestContext, action),
+            logAtAllowedLevel(logLevelFor(requestContext, action, true),
                     () -> "allowed listener " + buildLogMessage(requestContext, action, true));
             return AuthorizationResult.ALLOWED;
         }
@@ -469,13 +478,8 @@ public class CustomAclAuthorizer implements Authorizer {
     }
 
     public void logAuditMessage(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
-        if ((authorized && action.logIfAllowed()) ||
-                (!authorized && action.logIfDenied())) {
-            logAtAllowedLevel(logLevelFor(requestContext, action),
-                    () -> buildLogMessage(requestContext, action, authorized));
-        } else if (log.isTraceEnabled()) {
-            log.trace(buildLogMessage(requestContext, action, authorized));
-        }
+        logAtAllowedLevel(logLevelFor(requestContext, action, authorized),
+                () -> buildLogMessage(requestContext, action, authorized));
     }
 
     private String buildLogMessage(AuthorizableRequestContext requestContext, Action action, boolean authorized) {

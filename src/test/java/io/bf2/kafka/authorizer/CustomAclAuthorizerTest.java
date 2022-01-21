@@ -3,11 +3,6 @@
  */
 package io.bf2.kafka.authorizer;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.when;
-
 import org.apache.kafka.common.acl.AccessControlEntry;
 import org.apache.kafka.common.acl.AclBinding;
 import org.apache.kafka.common.acl.AclBindingFilter;
@@ -45,6 +40,11 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.when;
 
 class CustomAclAuthorizerTest {
 
@@ -305,7 +305,7 @@ class CustomAclAuthorizerTest {
                     new ResourcePattern(resourceType, resourceName, PatternType.LITERAL), 0, true, true);
 
             assertEquals(2, auth.aclLoggingMap.size(), title);
-            assertEquals(expLevel, auth.logLevelFor(rc, action), title);
+            assertEquals(expLevel, auth.logLevelFor(rc, action, true), title);
         }
     }
 
