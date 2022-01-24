@@ -36,6 +36,7 @@ import org.slf4j.event.Level;
 
 import java.io.IOException;
 import java.security.Principal;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -50,7 +51,6 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -110,6 +110,9 @@ public class CustomAclAuthorizer implements Authorizer {
 
     private static final Logger log = LoggerFactory.getLogger(CustomAclAuthorizer.class);
 
+    static final String DEFAULT_WINDOW_DURATION = "PT5M";
+    static final String DEFAULT_MAX_WINDOW_ENTRIES = "5000";
+
     static final String CREATE_ACL_INVALID_PRINCIPAL = "Invalid ACL principal name";
     static final String CREATE_ACL_INVALID_BINDING = "Invalid ACL resource or operation";
 
@@ -129,6 +132,8 @@ public class CustomAclAuthorizer implements Authorizer {
     static final String ALLOWED_LISTENERS = CONFIG_PREFIX + "allowed-listeners";
     static final String ACL_PREFIX = CONFIG_PREFIX + "acl.";
     static final String LOGGING_PREFIX = ACL_PREFIX + "logging.";
+    static final String LOGGING_WINDOW_MAX_SIZE = ACL_PREFIX + "logging-window.max-size";
+    static final String LOGGING_WINDOW_DURATION = ACL_PREFIX + "logging-window.duration";
     static final Pattern ACL_PATTERN = Pattern.compile(Pattern.quote(ACL_PREFIX) + "\\d+");
     static final Pattern ACL_LOGGING_PATTERN = Pattern.compile(Pattern.quote(LOGGING_PREFIX) + "\\d+");
 
@@ -141,8 +146,7 @@ public class CustomAclAuthorizer implements Authorizer {
     final Map<String, List<String>> allowedAcls = new HashMap<>();
     final Set<String> aclPrincipals = new HashSet<>();
 
-    final Cache<List<?>, Object> lastLog =
-            CacheBuilder.newBuilder().expireAfterWrite(5, TimeUnit.MINUTES).maximumSize(5000).build();
+    Cache<List<?>, Object> lastAuthorizedLogCache;
 
     /**
      * For backward-compatibility with {@link GlobalAclAuthorizer}.
@@ -239,6 +243,25 @@ public class CustomAclAuthorizer implements Authorizer {
                         .collect(Collectors.joining(",\n\t")));
         }
 
+        String maxSize = DEFAULT_MAX_WINDOW_ENTRIES;
+        String duration = DEFAULT_WINDOW_DURATION;
+
+        for (Map.Entry<String, ?> config : configs.entrySet()) {
+            if (!(config.getValue() instanceof String)) {
+                continue;
+            }
+            if (config.getKey().equals(LOGGING_WINDOW_MAX_SIZE)) {
+                maxSize = (String)config.getValue();
+            } else if (config.getKey().equals(LOGGING_WINDOW_DURATION)) {
+                duration = (String)config.getValue();
+            }
+        }
+        if (log.isInfoEnabled()) {
+            log.info("Windowing authorized fetch/produce to {} duration and {} max entries", duration, maxSize);
+        }
+        this.lastAuthorizedLogCache =
+                CacheBuilder.newBuilder().expireAfterWrite(Duration.parse(duration)).maximumSize(Long.parseLong(maxSize)).build();
+
         configureDefaults(defaultBindings);
     }
 
@@ -268,7 +291,7 @@ public class CustomAclAuthorizer implements Authorizer {
                 || requestContext.requestType() == ApiKeys.PRODUCE.id)) {
             Object ref = new Object();
             try {
-                Object last = lastLog.get(Arrays.asList(action.resourcePattern().name(), requestContext.principal(),
+                Object last = lastAuthorizedLogCache.get(Arrays.asList(action.resourcePattern().name(), requestContext.principal(),
                         requestContext.requestType(), requestContext.listenerName()), () -> ref);
                 if (last != ref) {
                     return Level.TRACE;

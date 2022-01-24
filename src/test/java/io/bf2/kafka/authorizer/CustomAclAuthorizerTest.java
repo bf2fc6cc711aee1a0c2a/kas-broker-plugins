@@ -199,6 +199,14 @@ class CustomAclAuthorizerTest {
 
             assertEquals(1, results.size());
             assertEquals(expectedResult, results.get(0));
+
+            // authorize again and check the cache size
+            results = auth.authorize(rc, Arrays.asList(action));
+            if (expectedResult == AuthorizationResult.ALLOWED && (requestType == ApiKeys.FETCH.id || requestType == ApiKeys.PRODUCE.id)) {
+                assertEquals(1, auth.lastAuthorizedLogCache.size());
+            } else {
+                assertEquals(0, auth.lastAuthorizedLogCache.size());
+            }
         }
     }
 
