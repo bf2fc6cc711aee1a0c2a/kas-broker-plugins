@@ -6,6 +6,9 @@ package io.bf2.kafka.authorizer;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.RemovalListener;
 import kafka.security.authorizer.AclEntry;
 import org.apache.kafka.common.Endpoint;
 import org.apache.kafka.common.acl.AccessControlEntryFilter;
@@ -34,6 +37,9 @@ import org.slf4j.event.Level;
 
 import java.io.IOException;
 import java.security.Principal;
+import java.text.MessageFormat;
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -46,6 +52,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -103,6 +111,7 @@ import java.util.stream.IntStream;
  */
 public class CustomAclAuthorizer implements Authorizer {
 
+    private static final MessageFormat MESSAGE_FORMAT = new MessageFormat("Principal = {0} is {1} Operation = {2} from host = {3} via listener {4} on resource = {5}{6}{7}{8}{9} for request = {10} with resourceRefCount = {11}{12,choice,0#|1#|1< with {12,number,integer} identical entries suppressed}");
     private static final Logger log = LoggerFactory.getLogger(CustomAclAuthorizer.class);
 
     static final String CREATE_ACL_INVALID_PRINCIPAL = "Invalid ACL principal name";
@@ -135,6 +144,7 @@ public class CustomAclAuthorizer implements Authorizer {
     final Map<ResourceType, List<AclLoggingConfig>> aclLoggingMap = new EnumMap<>(ResourceType.class);
     final Map<String, List<String>> allowedAcls = new HashMap<>();
     final Set<String> aclPrincipals = new HashSet<>();
+    final Cache<CacheKey, CacheEntry> loggingEventCache;
 
     /**
      * For backward-compatibility with {@link GlobalAclAuthorizer}.
@@ -148,6 +158,12 @@ public class CustomAclAuthorizer implements Authorizer {
 
     public CustomAclAuthorizer(kafka.security.authorizer.AclAuthorizer delegate) {
         this.delegate = delegate;
+        loggingEventCache = CacheBuilder.newBuilder()
+                .expireAfterWrite(Duration.of(5000, ChronoUnit.SECONDS))
+                .maximumSize(5000)
+                .removalListener((RemovalListener<CacheKey, CacheEntry>) removalNotification ->
+                        removalNotification.getValue().log())
+                .build();
     }
 
     public CustomAclAuthorizer() {
@@ -242,8 +258,7 @@ public class CustomAclAuthorizer implements Authorizer {
                         && binding.matchesPrincipal(requestContext.principal())
                         && binding.matchesApiKey(requestContext.requestType())
                         && binding.matchesListener(requestContext.listenerName()))
-                .sorted(AclLoggingConfig::prioritize)
-                .findFirst()
+                .min(AclLoggingConfig::prioritize)
                 .map(AclLoggingConfig::getLevel)
                 .orElse(Level.INFO);
     }
@@ -353,14 +368,14 @@ public class CustomAclAuthorizer implements Authorizer {
         // is super user allow any operation
         if (delegate.isSuperUser(requestContext.principal())) {
             logAtAllowedLevel(logLevelFor(requestContext, action),
-                    () -> "super.user " + buildLogMessage(requestContext, action, true));
+                    () -> "super.user " + buildLogMessage(requestContext, action, true, 0L));
             return AuthorizationResult.ALLOWED;
         }
 
         // if request made on any allowed listeners allow always
         if (isAllowedListener(requestContext.listenerName())) {
             logAtAllowedLevel(logLevelFor(requestContext, action),
-                    () -> "allowed listener " + buildLogMessage(requestContext, action, true));
+                    () -> "allowed listener " + buildLogMessage(requestContext, action, true, 0L));
             return AuthorizationResult.ALLOWED;
         }
 
@@ -448,14 +463,20 @@ public class CustomAclAuthorizer implements Authorizer {
     public void logAuditMessage(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
         if ((authorized && action.logIfAllowed()) ||
                 (!authorized && action.logIfDenied())) {
-            logAtAllowedLevel(logLevelFor(requestContext, action),
-                    () -> buildLogMessage(requestContext, action, authorized));
+            final CacheKey cacheKey = new CacheKey(action.resourcePattern().name(), requestContext.principal(), requestContext.requestType(), requestContext.listenerName(), authorized);
+            try {
+                loggingEventCache.get(cacheKey, () -> new CacheEntry(logLevelFor(requestContext, action), (suppressedCount) -> buildLogMessage(requestContext, action, authorized, suppressedCount))).suppressionCounter.increment();
+            } catch (ExecutionException e) {
+                log.error("Unable to read log event cache. {e}", e);
+                logAtAllowedLevel(logLevelFor(requestContext, action),
+                        () -> buildLogMessage(requestContext, action, authorized, 0L));
+            }
         } else if (log.isTraceEnabled()) {
-            log.trace(buildLogMessage(requestContext, action, authorized));
+            log.trace(buildLogMessage(requestContext, action, authorized, 0L));
         }
     }
 
-    private String buildLogMessage(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
+    private String buildLogMessage(AuthorizableRequestContext requestContext, Action action, boolean authorized, Long suppressedCount) {
         Principal principal = requestContext.principal();
         String operation = SecurityUtils.operationName(action.operation());
         String host = requestContext.clientAddress().getHostAddress();
@@ -464,9 +485,7 @@ public class CustomAclAuthorizer implements Authorizer {
         String authResult = authorized ? "Allowed" : "Denied";
         Object apiKey = ApiKeys.hasId(requestContext.requestType()) ? ApiKeys.forId(requestContext.requestType()).name() : requestContext.requestType();
         int refCount = action.resourceReferenceCount();
-
-        return String.format("Principal = %s is %s Operation = %s from host = %s via listener %s on resource = %s%s%s%s%s for request = %s with resourceRefCount = %s",
-                principal,
+        return MESSAGE_FORMAT.format(new Object[]{principal,
                 authResult,
                 operation,
                 host,
@@ -477,7 +496,8 @@ public class CustomAclAuthorizer implements Authorizer {
                 AclEntry.ResourceSeparator(),
                 action.resourcePattern().name(),
                 apiKey,
-                refCount);
+                refCount,
+                suppressedCount});
     }
 
     boolean isAclBindingAllowed(AclBinding binding) {
@@ -556,5 +576,50 @@ public class CustomAclAuthorizer implements Authorizer {
     @Override
     public void close() throws IOException {
         delegate.close();
+    }
+
+    private static class CacheKey {
+        private final String resourceName;
+        private final KafkaPrincipal principal;
+        private final int requestType;
+        private final String listenerName;
+        private final boolean authorized;
+
+        private CacheKey(String resourceName, KafkaPrincipal principal, int requestType, String listenerName, boolean authorized) {
+            this.resourceName = resourceName;
+            this.principal = principal;
+            this.requestType = requestType;
+            this.listenerName = listenerName;
+            this.authorized = authorized;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CacheKey cacheKey = (CacheKey) o;
+            return requestType == cacheKey.requestType && authorized == cacheKey.authorized && Objects.equals(resourceName, cacheKey.resourceName) && Objects.equals(principal, cacheKey.principal) && Objects.equals(listenerName, cacheKey.listenerName);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(resourceName, principal, requestType, listenerName, authorized);
+        }
+    }
+
+    private class CacheEntry {
+        private final LongAdder suppressionCounter;
+        private final Level logLevel;
+        private final Function<Long, String> messageGenerator;
+
+        private CacheEntry(Level logLevel, Function<Long, String> messageGenerator) {
+            this.suppressionCounter = new LongAdder();
+            this.logLevel = logLevel;
+            this.messageGenerator = messageGenerator;
+        }
+
+        public void log() {
+            logAtAllowedLevel(logLevel, () -> messageGenerator.apply(suppressionCounter.longValue()));
+        }
     }
 }

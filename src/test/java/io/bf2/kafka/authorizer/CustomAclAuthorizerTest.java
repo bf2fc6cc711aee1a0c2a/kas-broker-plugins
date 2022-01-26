@@ -3,16 +3,8 @@
  */
 package io.bf2.kafka.authorizer;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.when;
-
-import org.apache.kafka.common.acl.AccessControlEntry;
-import org.apache.kafka.common.acl.AclBinding;
-import org.apache.kafka.common.acl.AclBindingFilter;
-import org.apache.kafka.common.acl.AclOperation;
-import org.apache.kafka.common.acl.AclPermissionType;
+import io.bf2.kafka.authorizer.VerifiableAppenderExtension.LoggedEvents;
+import org.apache.kafka.common.acl.*;
 import org.apache.kafka.common.errors.ApiException;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.resource.PatternType;
@@ -24,9 +16,11 @@ import org.apache.kafka.server.authorizer.AclCreateResult;
 import org.apache.kafka.server.authorizer.Action;
 import org.apache.kafka.server.authorizer.AuthorizableRequestContext;
 import org.apache.kafka.server.authorizer.AuthorizationResult;
+import org.apache.log4j.spi.LoggingEvent;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mockito;
@@ -46,6 +40,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(VerifiableAppenderExtension.class)
 class CustomAclAuthorizerTest {
 
     static Map<String, Object> config;
@@ -71,7 +70,7 @@ class CustomAclAuthorizerTest {
             });
 
         Mockito.when(this.delegate.acls(Mockito.any(AclBindingFilter.class)))
-            .thenReturn(Collections.emptyList());
+                .thenReturn(Collections.emptyList());
     }
 
     @Test
@@ -307,6 +306,175 @@ class CustomAclAuthorizerTest {
             assertEquals(2, auth.aclLoggingMap.size(), title);
             assertEquals(expLevel, auth.logLevelFor(rc, action), title);
         }
+    }
+
+
+    @Test
+    void shouldWindowMessage(@LoggedEvents List<LoggingEvent> loggingEvents) throws IOException, InterruptedException {
+        //Given
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
+            auth.configure(config);
+
+            AuthorizableRequestContext rc = mock(AuthorizableRequestContext.class);
+            when(rc.clientAddress()).thenReturn(InetAddress.getLoopbackAddress());
+            when(rc.listenerName()).thenReturn("security-9095");
+            when(rc.principal()).thenReturn(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "User: test"));
+            when(rc.requestType()).thenReturn((int) ApiKeys.FETCH.id);
+
+            Action infoAction = new Action(AclOperation.READ,
+                    new ResourcePattern(ResourceType.TOPIC, "baz", PatternType.LITERAL), 0, true, true);
+
+            int alreadyLogged = loggingEvents.size();
+
+            //When
+            auth.logAuditMessage(rc, infoAction, true);
+
+            //Then
+            assertEquals(alreadyLogged, loggingEvents.size());
+        }
+    }
+
+    @Test
+    void shouldLogEventsAfterWindowExpiry(@LoggedEvents List<LoggingEvent> loggingEvents) throws IOException, InterruptedException {
+        //Given
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
+            auth.configure(config);
+
+            AuthorizableRequestContext rc = mock(AuthorizableRequestContext.class);
+            when(rc.clientAddress()).thenReturn(InetAddress.getLoopbackAddress());
+            when(rc.listenerName()).thenReturn("security-9095");
+            when(rc.principal()).thenReturn(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "test"));
+            when(rc.requestType()).thenReturn((int) ApiKeys.FETCH.id);
+
+            Action infoAction = new Action(AclOperation.READ,
+                    new ResourcePattern(ResourceType.TOPIC, "baz", PatternType.LITERAL), 0, true, true);
+
+            int alreadyLogged = loggingEvents.size();
+            auth.logAuditMessage(rc, infoAction, true);
+            assertEquals(alreadyLogged, loggingEvents.size(), "Something logged before window expiry");
+
+            //When
+            auth.loggingEventCache.invalidateAll(); //Rather than wait for window expiry purge the cache manually
+
+            //Then
+            assertTrue(alreadyLogged < loggingEvents.size(), "Nothing logged after window expiry");
+            assertMessageLogged(loggingEvents, "Principal = User:test is Allowed Operation = Read from host = 127.0.0.1 via listener security-9095 on resource = Topic:LITERAL:baz for request = FETCH with resourceRefCount = 0", Level.INFO);
+        }
+    }
+
+    @Test
+    void shouldIncludeSuppressedCountLogEventsAfterWindowExpiry(@LoggedEvents List<LoggingEvent> loggingEvents) throws IOException, InterruptedException {
+        //Given
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
+            auth.configure(config);
+
+            AuthorizableRequestContext rc = mock(AuthorizableRequestContext.class);
+            when(rc.clientAddress()).thenReturn(InetAddress.getLoopbackAddress());
+            when(rc.listenerName()).thenReturn("security-9095");
+            when(rc.principal()).thenReturn(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "test"));
+            when(rc.requestType()).thenReturn((int) ApiKeys.FETCH.id);
+
+            Action infoAction = new Action(AclOperation.READ,
+                    new ResourcePattern(ResourceType.TOPIC, "baz", PatternType.LITERAL), 0, true, true);
+
+            int alreadyLogged = loggingEvents.size();
+            for (int i = 0; i < 10; i++) {
+                auth.logAuditMessage(rc, infoAction, true);
+            }
+            assertEquals(alreadyLogged, loggingEvents.size(), "Something logged before window expiry");
+
+            //When
+            auth.loggingEventCache.invalidateAll(); //Rather than wait for window expiry purge the cache manually
+
+            //Then
+            assertTrue(alreadyLogged < loggingEvents.size(), "Nothing logged after window expiry");
+            assertMessageLogged(loggingEvents, "Principal = User:test is Allowed Operation = Read from host = 127.0.0.1 via listener security-9095 on resource = Topic:LITERAL:baz for request = FETCH with resourceRefCount = 0 with 10 identical entries suppressed", Level.INFO);
+            //Arguably this is a fencepost type error, as there were only 9 entries "suppressed" because this one was logged
+        }
+    }
+
+    @Test
+    void shouldNotMergeLogEventsWithDifferentDecisions(@LoggedEvents List<LoggingEvent> loggingEvents) throws IOException, InterruptedException {
+        //Given
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
+            auth.configure(config);
+
+            AuthorizableRequestContext rc = mock(AuthorizableRequestContext.class);
+            when(rc.clientAddress()).thenReturn(InetAddress.getLoopbackAddress());
+            when(rc.listenerName()).thenReturn("security-9095");
+            when(rc.principal()).thenReturn(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "test"));
+            when(rc.requestType()).thenReturn((int) ApiKeys.FETCH.id);
+
+            Action infoAction = new Action(AclOperation.READ,
+                    new ResourcePattern(ResourceType.TOPIC, "baz", PatternType.LITERAL), 0, true, true);
+
+            int alreadyLogged = loggingEvents.size();
+            auth.logAuditMessage(rc, infoAction, true);
+            auth.logAuditMessage(rc, infoAction, false);
+            assertEquals(alreadyLogged, loggingEvents.size(), "Something logged before window expiry");
+
+            //When
+            auth.loggingEventCache.invalidateAll(); //Rather than wait for window expiry purge the cache manually
+
+            //Then
+            assertTrue(alreadyLogged < loggingEvents.size(), "Nothing logged after window expiry");
+            assertMessageLogged(loggingEvents, "Principal = User:test is Allowed Operation = Read from host = 127.0.0.1 via listener security-9095 on resource = Topic:LITERAL:baz for request = FETCH with resourceRefCount = 0", Level.INFO);
+            assertMessageLogged(loggingEvents, "Principal = User:test is Denied Operation = Read from host = 127.0.0.1 via listener security-9095 on resource = Topic:LITERAL:baz for request = FETCH with resourceRefCount = 0", Level.INFO);
+        }
+    }
+
+    @Test
+    void shouldNotMoveRepeatedMessagesToTraceIfAuthDecisionsDontMatch() throws IOException {
+        //Given
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
+            auth.configure(config);
+
+            AuthorizableRequestContext rc = mock(AuthorizableRequestContext.class);
+            when(rc.clientAddress()).thenReturn(InetAddress.getLoopbackAddress());
+            when(rc.listenerName()).thenReturn("security-9095");
+            when(rc.principal()).thenReturn(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "User: test"));
+            when(rc.requestType()).thenReturn((int) ApiKeys.FETCH.id);
+
+            Action infoAction = new Action(AclOperation.READ,
+                    new ResourcePattern(ResourceType.TOPIC, "baz", PatternType.LITERAL), 0, true, true);
+
+            assertEquals(Level.INFO, auth.logLevelFor(rc, infoAction));
+
+            //When
+            Action traceAction = new Action(AclOperation.READ,
+                    new ResourcePattern(ResourceType.TOPIC, "baz", PatternType.LITERAL), 0, true, true);
+
+            //Then
+            assertEquals(Level.INFO, auth.logLevelFor(rc, traceAction));
+        }
+    }
+
+    private void assertMessageLogged(List<LoggingEvent> loggingEvents, String expectedMessage, Level expectedLevel) {
+        org.apache.log4j.Level log4jLevel;
+        switch (expectedLevel) {
+            case ERROR:
+                log4jLevel = org.apache.log4j.Level.ERROR;
+                break;
+            case WARN:
+                log4jLevel = org.apache.log4j.Level.WARN;
+                break;
+            case INFO:
+                log4jLevel = org.apache.log4j.Level.INFO;
+                break;
+            case DEBUG:
+                log4jLevel = org.apache.log4j.Level.DEBUG;
+                break;
+            case TRACE:
+                log4jLevel = org.apache.log4j.Level.TRACE;
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported logging level");
+        }
+        assertTrue(loggingEvents.stream()
+                        .filter(loggingEvent -> loggingEvent.getLevel() == log4jLevel)
+                        .anyMatch(loggingEvent -> expectedMessage.equals(loggingEvent.getMessage())),
+                "expected message not logged at " + expectedLevel
+        );
     }
 
 }
