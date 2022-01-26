@@ -11,11 +11,7 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalListener;
 import kafka.security.authorizer.AclEntry;
 import org.apache.kafka.common.Endpoint;
-import org.apache.kafka.common.acl.AccessControlEntryFilter;
-import org.apache.kafka.common.acl.AclBinding;
-import org.apache.kafka.common.acl.AclBindingFilter;
-import org.apache.kafka.common.acl.AclOperation;
-import org.apache.kafka.common.acl.AclPermissionType;
+import org.apache.kafka.common.acl.*;
 import org.apache.kafka.common.errors.ApiException;
 import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -24,13 +20,7 @@ import org.apache.kafka.common.resource.ResourcePatternFilter;
 import org.apache.kafka.common.resource.ResourceType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.SecurityUtils;
-import org.apache.kafka.server.authorizer.AclCreateResult;
-import org.apache.kafka.server.authorizer.AclDeleteResult;
-import org.apache.kafka.server.authorizer.Action;
-import org.apache.kafka.server.authorizer.AuthorizableRequestContext;
-import org.apache.kafka.server.authorizer.AuthorizationResult;
-import org.apache.kafka.server.authorizer.Authorizer;
-import org.apache.kafka.server.authorizer.AuthorizerServerInfo;
+import org.apache.kafka.server.authorizer.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.event.Level;
@@ -40,16 +30,7 @@ import java.security.Principal;
 import java.text.MessageFormat;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
@@ -595,8 +576,12 @@ public class CustomAclAuthorizer implements Authorizer {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
             CacheKey cacheKey = (CacheKey) o;
             return requestType == cacheKey.requestType && authorized == cacheKey.authorized && Objects.equals(resourceName, cacheKey.resourceName) && Objects.equals(principal, cacheKey.principal) && Objects.equals(listenerName, cacheKey.listenerName);
         }
