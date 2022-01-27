@@ -56,6 +56,7 @@
         <slf4j.version>1.7.30</slf4j.version>
         <jackson-core.version>2.10.5</jackson-core.version>
         <jackson-databind.version>2.10.5.1</jackson-databind.version>
+        <guava.version>30.0-jre</guava.version>
         <zookeeper.version>3.6.3</zookeeper.version>
         <kafka-junit.version>4.2.0</kafka-junit.version>
         <curator-test.version>5.2.0</curator-test.version>
@@ -86,6 +87,11 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>${jackson-databind.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>${guava.version}</version>
         </dependency>
 
         <dependency>
