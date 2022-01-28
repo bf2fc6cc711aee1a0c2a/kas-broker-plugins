@@ -139,7 +139,7 @@ public class AclLoggingConfig {
                         apis, apisExcluded, priority));
     }
 
-    static int prioritize(AclLoggingConfig b1, AclLoggingConfig b2) {
+    public static int prioritize(AclLoggingConfig b1, AclLoggingConfig b2) {
         int priorityComparison = Integer.compare(b1.getPriority(), b2.getPriority());
 
         if (priorityComparison != 0) {
