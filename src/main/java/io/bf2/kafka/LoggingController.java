@@ -6,6 +6,7 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalListener;
 import io.bf2.kafka.authorizer.AclLoggingConfig;
 import kafka.security.authorizer.AclEntry;
+import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.resource.ResourceType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
@@ -77,9 +78,16 @@ public class LoggingController {
     public void logAuditMessage(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
         if ((authorized && action.logIfAllowed()) ||
                 (!authorized && action.logIfDenied())) {
-            final LoggingController.CacheKey cacheKey = new LoggingController.CacheKey(action.resourcePattern().name(), requestContext.principal(), requestContext.requestType(), requestContext.listenerName(), authorized);
+            final LoggingController.CacheKey cacheKey = new LoggingController.CacheKey(action.resourcePattern().name(),
+                    action.operation(),
+                    requestContext.principal(),
+                    requestContext.requestType(),
+                    requestContext.listenerName(),
+                    authorized);
             try {
-                final CacheEntry cacheEntry = loggingEventCache.get(cacheKey, () -> new CacheEntry(logLevelFor(requestContext, action), (suppressedCount) -> buildLogMessage(requestContext, action, authorized, suppressedCount)));
+                final CacheEntry cacheEntry = loggingEventCache.get(cacheKey, () -> new CacheEntry(
+                        logLevelFor(requestContext, action),
+                        (suppressedCount) -> buildLogMessage(requestContext, action, authorized, suppressedCount)));
                 cacheEntry.suppressionCounter.increment();
             } catch (ExecutionException e) {
                 log.error("Unable to read log event cache. {e}", e);
@@ -165,13 +173,15 @@ public class LoggingController {
 
     public static class CacheKey {
         private final String resourceName;
+        private final AclOperation operation;
         private final KafkaPrincipal principal;
         private final int requestType;
         private final String listenerName;
         private final boolean authorized;
 
-        private CacheKey(String resourceName, KafkaPrincipal principal, int requestType, String listenerName, boolean authorized) {
+        private CacheKey(String resourceName, AclOperation operation, KafkaPrincipal principal, int requestType, String listenerName, boolean authorized) {
             this.resourceName = resourceName;
+            this.operation = operation;
             this.principal = principal;
             this.requestType = requestType;
             this.listenerName = listenerName;
@@ -187,12 +197,17 @@ public class LoggingController {
                 return false;
             }
             CacheKey cacheKey = (CacheKey) o;
-            return requestType == cacheKey.requestType && authorized == cacheKey.authorized && Objects.equals(resourceName, cacheKey.resourceName) && Objects.equals(principal, cacheKey.principal) && Objects.equals(listenerName, cacheKey.listenerName);
+            return requestType == cacheKey.requestType &&
+                    authorized == cacheKey.authorized &&
+                    Objects.equals(resourceName, cacheKey.resourceName) &&
+                    operation == cacheKey.operation &&
+                    Objects.equals(principal, cacheKey.principal) &&
+                    Objects.equals(listenerName, cacheKey.listenerName);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(resourceName, principal, requestType, listenerName, authorized);
+            return Objects.hash(resourceName, operation, principal, requestType, listenerName, authorized);
         }
     }
 

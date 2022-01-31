@@ -185,29 +185,6 @@ class LoggingControllerTest {
 
     }
 
-    @Test
-    void shouldNotMoveRepeatedMessagesToTraceIfAuthDecisionsDontMatch() {
-        //Given
-
-        AuthorizableRequestContext rc = mock(AuthorizableRequestContext.class);
-        when(rc.clientAddress()).thenReturn(InetAddress.getLoopbackAddress());
-        when(rc.listenerName()).thenReturn("security-9095");
-        when(rc.principal()).thenReturn(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "User: test"));
-        when(rc.requestType()).thenReturn((int) ApiKeys.FETCH.id);
-
-        Action infoAction = new Action(AclOperation.READ,
-                new ResourcePattern(ResourceType.TOPIC, "baz", PatternType.LITERAL), 0, true, true);
-
-        assertEquals(Level.INFO, loggingController.logLevelFor(rc, infoAction));
-
-        //When
-        Action traceAction = new Action(AclOperation.READ,
-                new ResourcePattern(ResourceType.TOPIC, "baz", PatternType.LITERAL), 0, true, true);
-
-        //Then
-        assertEquals(Level.INFO, loggingController.logLevelFor(rc, traceAction));
-    }
-
     private void assertMessageLogged(List<LoggingEvent> loggingEvents, String expectedMessage, Level expectedLevel) {
         org.apache.log4j.Level log4jLevel;
         switch (expectedLevel) {
