@@ -43,14 +43,11 @@ public class AuditLoggingController implements Configurable {
                 .map(String.class::cast)
                 .map(AclLoggingConfig::valueOf)
                 .flatMap(List::stream)
-                .forEach(binding -> {
-                    aclLoggingMap.compute(binding.getResourcePattern().resourceType(), (k, v) -> {
-                        List<AclLoggingConfig> bindings = Objects.requireNonNullElseGet(v, ArrayList::new);
-                        bindings.add(binding);
-                        return bindings;
-                    });
-                });
-
+                .forEach(binding -> aclLoggingMap.compute(binding.getResourcePattern().resourceType(), (k, v) -> {
+                    List<AclLoggingConfig> bindings = Objects.requireNonNullElseGet(v, ArrayList::new);
+                    bindings.add(binding);
+                    return bindings;
+                }));
     }
 
     public void logAuditMessage(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
@@ -71,8 +68,7 @@ public class AuditLoggingController implements Configurable {
                         && binding.matchesPrincipal(requestContext.principal())
                         && binding.matchesApiKey(requestContext.requestType())
                         && binding.matchesListener(requestContext.listenerName()))
-                .sorted(AclLoggingConfig::prioritize)
-                .findFirst()
+                .min(AclLoggingConfig::prioritize)
                 .map(AclLoggingConfig::getLevel)
                 .orElse(Level.INFO);
     }
