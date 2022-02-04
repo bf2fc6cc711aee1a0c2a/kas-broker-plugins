@@ -23,8 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -289,6 +288,39 @@ class AuditLoggingControllerTest {
         assertEquals(minLoggedEventCount, loggingEvents.size(), "Something logged after window expiry");
         assertMessageLogged(loggingEvents, "Principal = User:test is Allowed Operation = Read from host = 127.0.0.1 via listener security-9095 on resource = Topic:LITERAL:baz for request = FETCH with resourceRefCount = 0", Level.INFO);
         assertMessageLogged(loggingEvents, "Principal = User:test is Allowed Operation = Read from host = 127.0.0.1 via listener security-9095 on resource = Topic:LITERAL:baz for request = PRODUCE with resourceRefCount = 0", Level.INFO);
+    }
+
+
+    @Test
+    void shouldLogSuppressedEventsOnClose(@LoggedEvents List<LoggingEvent> loggingEvents) {
+        //Given
+        Action infoAction = new Action(AclOperation.READ,
+                new ResourcePattern(ResourceType.TOPIC, "baz", PatternType.LITERAL), 0, true, true);
+
+        final int minLoggedEventCount = loggingEvents.size() + 1;
+        auditLoggingController.logAuditMessage(fetchRequestContext, infoAction, true);
+        auditLoggingController.logAuditMessage(fetchRequestContext, infoAction, true);
+        // We expect one log entry as part of the initial logging event
+        assertEquals(minLoggedEventCount, loggingEvents.size(), "Something extra logged before window expiry");
+
+        //When
+        auditLoggingController.close();
+
+        //Then
+        assertTrue(minLoggedEventCount < loggingEvents.size(), "Nothing logged after window expiry");
+        assertMessageLogged(loggingEvents, "Principal = User:test is Allowed Operation = Read from host = 127.0.0.1 via listener security-9095 on resource = Topic:LITERAL:baz for request = FETCH with resourceRefCount = 0", Level.INFO);
+        assertMessageLogged(loggingEvents, "Principal = User:test is Allowed Operation = Read from host = 127.0.0.1 via listener security-9095 on resource = Topic:LITERAL:baz for request = FETCH with resourceRefCount = 0 suppressed log event original at .*", Level.INFO);
+    }
+
+    @Test
+    void shouldAllowShutdownBeforeConfigured() {
+        //Given
+        final AuditLoggingController freshController = new AuditLoggingController();
+
+        //When
+        assertDoesNotThrow(freshController::close);
+
+        //Then
     }
 
     @SuppressWarnings("SameParameterValue")

@@ -455,5 +455,6 @@ public class CustomAclAuthorizer implements Authorizer {
     @Override
     public void close() throws IOException {
         delegate.close();
+        loggingController.close();
     }
 }

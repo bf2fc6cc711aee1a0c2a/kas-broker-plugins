@@ -20,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.event.Level;
 
+import java.io.Closeable;
 import java.security.Principal;
 import java.sql.Date;
 import java.text.MessageFormat;
@@ -41,7 +42,7 @@ import java.util.stream.StreamSupport;
 
 import static io.bf2.kafka.authorizer.CustomAclAuthorizer.ACL_PREFIX;
 
-public class AuditLoggingController implements Configurable {
+public class AuditLoggingController implements Configurable, Closeable {
 
     private static final Logger log = LoggerFactory.getLogger(AuditLoggingController.class);
     private static final String LOGGING_PREFIX = ACL_PREFIX + "logging.";
@@ -52,7 +53,6 @@ public class AuditLoggingController implements Configurable {
     @VisibleForTesting
     final Map<ResourceType, List<AclLoggingConfig>> aclLoggingMap = new EnumMap<>(ResourceType.class);
 
-    @VisibleForTesting
     private Cache<CacheKey, CacheEntry> loggingEventCache;
     private ImmutableSet<ApiKeys> suppressOperations;
 
@@ -73,6 +73,13 @@ public class AuditLoggingController implements Configurable {
                 }));
 
         configureRepeatedMessageSuppression(configs);
+    }
+
+    @Override
+    public void close() {
+        if (loggingEventCache != null) {
+            loggingEventCache.invalidateAll();
+        }
     }
 
     public void logAuditMessage(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
@@ -154,6 +161,7 @@ public class AuditLoggingController implements Configurable {
         }
     }
 
+    @VisibleForTesting
     void evictWindowedEvents() {
         loggingEventCache.invalidateAll();
     }
