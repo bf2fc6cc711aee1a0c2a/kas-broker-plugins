@@ -10,6 +10,8 @@ import com.google.common.collect.Sets;
 import kafka.security.authorizer.AclEntry;
 import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.acl.AclOperation;
+import org.apache.kafka.common.config.AbstractConfig;
+import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.resource.ResourceType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
@@ -58,6 +60,30 @@ public class AuditLoggingController implements Configurable, Closeable {
 
     @Override
     public void configure(Map<String, ?> configs) {
+        ConfigDef defs = new ConfigDef();
+        defs.define(LOGGING_PREFIX + "suppressionWindow.duration",
+                ConfigDef.Type.STRING,
+                Duration.ofSeconds(1).toString(),
+                ConfigDef.CompositeValidator.of(
+                        new ConfigDef.NonEmptyString(),
+                        (name, value) -> Duration.parse((String) value)),
+                ConfigDef.Importance.LOW,
+                "The duration over which repeated messages should be suppressed.");
+        defs.define(LOGGING_PREFIX + "suppressionWindow.eventCount",
+                ConfigDef.Type.INT,
+                5000,
+                ConfigDef.Range.between(0, 100000),
+                ConfigDef.Importance.LOW,
+                "A cap on the number of different event suppression windows to hold.");
+
+        defs.define(LOGGING_PREFIX + "suppressionWindow.apis",
+                ConfigDef.Type.STRING,
+                "PRODUCE,FETCH",
+                new ConfigDef.NonEmptyString(),
+                ConfigDef.Importance.LOW,
+                "THe APIs for which we should suppress *duplicate* events");
+        final AbstractConfig configParser = new AbstractConfig(defs, configs);
+
         configs.entrySet()
                 .stream()
                 .filter(config -> ACL_LOGGING_PATTERN.matcher(config.getKey()).matches())
@@ -72,7 +98,7 @@ public class AuditLoggingController implements Configurable, Closeable {
                     return bindings;
                 }));
 
-        configureRepeatedMessageSuppression(configs);
+        configureRepeatedMessageSuppression(configParser);
     }
 
     @Override
@@ -166,12 +192,11 @@ public class AuditLoggingController implements Configurable, Closeable {
         loggingEventCache.invalidateAll();
     }
 
-    private void configureRepeatedMessageSuppression(Map<String, ?> configs) {
-        final Duration cacheDuration = Duration.parse(getOrDefault(configs, LOGGING_PREFIX + "suppressionWindow.duration", Duration.ofSeconds(1).toString()));
-        final long eventCount = Long.parseLong(getOrDefault(configs, LOGGING_PREFIX + "suppressionWindow.eventCount", "5000"));
-        final String eventTypesCsv = getOrDefault(configs, LOGGING_PREFIX + "suppressionWindow.eventTypes", "PRODUCE,FETCH");
-
-        final Set<ApiKeys> configuredOperations = StreamSupport.stream(CSV_SPLITTER.split(eventTypesCsv).spliterator(), false).map(ApiKeys::valueOf).collect(Collectors.toSet());
+    private void configureRepeatedMessageSuppression(AbstractConfig configParser) {
+        final int eventCount = configParser.getInt(LOGGING_PREFIX + "suppressionWindow.eventCount");
+        final Duration cacheDuration = Duration.parse(configParser.getString(LOGGING_PREFIX + "suppressionWindow.duration"));
+        final String apisCsv = configParser.getString(LOGGING_PREFIX + "suppressionWindow.apis");
+        final Set<ApiKeys> configuredOperations = StreamSupport.stream(CSV_SPLITTER.split(apisCsv).spliterator(), false).map(ApiKeys::valueOf).collect(Collectors.toSet());
 
         suppressOperations = Sets.immutableEnumSet(configuredOperations);
         loggingEventCache = CacheBuilder.newBuilder()
@@ -180,14 +205,6 @@ public class AuditLoggingController implements Configurable, Closeable {
                 .removalListener((RemovalListener<CacheKey, CacheEntry>) removalNotification ->
                         removalNotification.getValue().log())
                 .build();
-    }
-
-    private String getOrDefault(Map<String, ?> configs, String key, String defaultValue) {
-        if (configs.containsKey(key)) {
-            return (String) configs.get(key);
-        } else {
-            return defaultValue;
-        }
     }
 
     private String buildLogMessage(AuthorizableRequestContext requestContext, Action action, boolean authorized) {

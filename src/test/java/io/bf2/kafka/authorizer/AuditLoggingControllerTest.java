@@ -98,7 +98,9 @@ class AuditLoggingControllerTest {
                 new ResourcePattern(ResourceType.TOPIC, "baz", PatternType.LITERAL), 0, true, true);
 
         final ApiKeys[] apiKeys = ApiKeys.values();
-        final int minLoggedEventCount = (apiKeys.length * 2) - 2; // By default, only produce and fetch operations are windowed
+        // By default, only produce and fetch operations are windowed
+        final int suppressedEventCount = 2;
+        final int minLoggedEventCount = loggingEvents.size() + (apiKeys.length * 2) - suppressedEventCount;
 
         //When
         for (ApiKeys value : apiKeys) {
