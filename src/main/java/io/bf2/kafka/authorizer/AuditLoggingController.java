@@ -47,6 +47,7 @@ import static io.bf2.kafka.authorizer.CustomAclAuthorizer.ACL_PREFIX;
 public class AuditLoggingController implements Configurable, Closeable {
 
     private static final Logger log = LoggerFactory.getLogger(AuditLoggingController.class);
+    private static final Logger auditLogger = LoggerFactory.getLogger("AuditEvents");
     private static final String LOGGING_PREFIX = ACL_PREFIX + "logging.";
     private static final Pattern ACL_LOGGING_PATTERN = Pattern.compile(Pattern.quote(LOGGING_PREFIX) + "\\d+");
     private static final Splitter CSV_SPLITTER = Splitter.on(",").omitEmptyStrings().trimResults();
@@ -127,7 +128,7 @@ public class AuditLoggingController implements Configurable, Closeable {
                     });
                     cacheEntry.repeated();
                 } catch (ExecutionException e) {
-                    log.warn("Error suppressing repeated log message, logging immediately. Due to {}", e.getMessage());
+                    log.warn("Error suppressing repeated log message, logging immediately. Due to {}", e.getMessage(), e);
                     logAtAllowedLevel(logLevelFor(requestContext, action),
                             () -> buildLogMessage(requestContext, action, authorized));
                 }
@@ -135,8 +136,8 @@ public class AuditLoggingController implements Configurable, Closeable {
                 logAtAllowedLevel(logLevelFor(requestContext, action),
                         () -> buildLogMessage(requestContext, action, authorized));
             }
-        } else if (log.isTraceEnabled()) {
-            log.trace(buildLogMessage(requestContext, action, authorized));
+        } else if (auditLogger.isTraceEnabled()) {
+            auditLogger.trace(buildLogMessage(requestContext, action, authorized));
         }
     }
 
@@ -160,28 +161,28 @@ public class AuditLoggingController implements Configurable, Closeable {
     void logAtAllowedLevel(Level lvl, Supplier<String> msg) {
         switch (lvl) {
             case ERROR:
-                if (log.isErrorEnabled()) {
-                    log.error(msg.get());
+                if (auditLogger.isErrorEnabled()) {
+                    auditLogger.error(msg.get());
                 }
                 break;
             case WARN:
-                if (log.isWarnEnabled()) {
-                    log.warn(msg.get());
+                if (auditLogger.isWarnEnabled()) {
+                    auditLogger.warn(msg.get());
                 }
                 break;
             case INFO:
-                if (log.isInfoEnabled()) {
-                    log.info(msg.get());
+                if (auditLogger.isInfoEnabled()) {
+                    auditLogger.info(msg.get());
                 }
                 break;
             case DEBUG:
-                if (log.isDebugEnabled()) {
-                    log.debug(msg.get());
+                if (auditLogger.isDebugEnabled()) {
+                    auditLogger.debug(msg.get());
                 }
                 break;
             case TRACE:
-                if (log.isTraceEnabled()) {
-                    log.trace(msg.get());
+                if (auditLogger.isTraceEnabled()) {
+                    auditLogger.trace(msg.get());
                 }
                 break;
         }
