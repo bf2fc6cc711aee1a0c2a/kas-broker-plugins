@@ -50,6 +50,9 @@ public class AuditLoggingController implements Configurable, Closeable {
     private static final Logger log = LoggerFactory.getLogger(AuditLoggingController.class);
     private static final Logger auditLogger = LoggerFactory.getLogger("AuditEvents");
     private static final String LOGGING_PREFIX = ACL_PREFIX + "logging.";
+    public static final String APIS_PROPERTY = LOGGING_PREFIX + "suppressionWindow.apis";
+    public static final String DURATION_PROPERTY = LOGGING_PREFIX + "suppressionWindow.duration";
+    public static final String EVENT_COUNT_PROPERTY = LOGGING_PREFIX + "suppressionWindow.eventCount";
     private static final Pattern ACL_LOGGING_PATTERN = Pattern.compile(Pattern.quote(LOGGING_PREFIX) + "\\d+");
     private static final Splitter CSV_SPLITTER = Splitter.on(",").omitEmptyStrings().trimResults();
     private static final MessageFormat MESSAGE_FORMAT = new MessageFormat("Principal = {0} is {1} Operation = {2} from host = {3} via listener {4} on resource = {5}{6}{7}{8}{9} for request = {10} with resourceRefCount = {11}{12,choice,0#|1# suppressed log event original at {13,date,short} {13,time,medium}|1< with {12,number,integer} identical entries suppressed between {13,date,short} {13,time,medium} and {14,date,short} {14,time,medium}}");
@@ -63,27 +66,7 @@ public class AuditLoggingController implements Configurable, Closeable {
     @Override
     public void configure(Map<String, ?> configs) {
         ConfigDef defs = new ConfigDef();
-        defs.define(LOGGING_PREFIX + "suppressionWindow.duration",
-                ConfigDef.Type.STRING,
-                Duration.ofSeconds(1).toString(),
-                ConfigDef.CompositeValidator.of(
-                        new ConfigDef.NonEmptyString(),
-                        (name, value) -> Duration.parse((String) value)),
-                ConfigDef.Importance.LOW,
-                "The duration over which repeated messages should be suppressed.");
-        defs.define(LOGGING_PREFIX + "suppressionWindow.eventCount",
-                ConfigDef.Type.INT,
-                5000,
-                ConfigDef.Range.between(0, 100000),
-                ConfigDef.Importance.LOW,
-                "A cap on the number of different event suppression windows to hold.");
-
-        defs.define(LOGGING_PREFIX + "suppressionWindow.apis",
-                ConfigDef.Type.STRING,
-                "PRODUCE,FETCH",
-                new ConfigDef.NonEmptyString(),
-                ConfigDef.Importance.LOW,
-                "THe APIs for which we should suppress *duplicate* events");
+        defineSuppressionWindowProperties(defs);
         final AbstractConfig configParser = new AbstractConfig(defs, configs);
 
         configs.entrySet()
@@ -118,38 +101,6 @@ public class AuditLoggingController implements Configurable, Closeable {
                     () -> buildLogMessage(requestContext, action, authorized));
         } else if (auditLogger.isTraceEnabled()) {
             auditLogger.trace(buildLogMessage(requestContext, action, authorized));
-        }
-    }
-
-    private boolean shouldSuppressDuplicates(AuthorizableRequestContext requestContext) {
-        return suppressApis.contains(ApiKeys.forId(requestContext.requestType()));
-    }
-
-    private boolean shouldLog(Action action, boolean authorized) {
-        if (authorized) {
-            return action.logIfAllowed();
-        } else {
-            return action.logIfDenied();
-        }
-    }
-
-    private void suppressDuplicates(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
-        final ResourcePattern resourcePattern = action.resourcePattern();
-        final CacheKey cacheKey = new CacheKey(resourcePattern.name(), resourcePattern.resourceType(), action.operation(), requestContext.principal(), requestContext.requestType(), requestContext.listenerName(), authorized);
-        final CacheEntry cacheEntry;
-        try {
-            cacheEntry = loggingEventCache.get(cacheKey, () -> {
-                //  Log first entry immediately to ensure the logs still read sensibly
-                logAtLevel(requestContext, action, authorized);
-                return new CacheEntry(
-                        logLevelFor(requestContext, action),
-                        (suppressedCount, windowStart, windowEnd) -> buildLogMessage(requestContext, action, authorized, suppressedCount, windowStart, windowEnd));
-
-            });
-            cacheEntry.repeated();
-        } catch (ExecutionException e) {
-            log.warn("Error suppressing repeated log message, logging immediately. Due to {}", e.getMessage(), e);
-            logAtLevel(requestContext, action, authorized);
         }
     }
 
@@ -205,14 +156,70 @@ public class AuditLoggingController implements Configurable, Closeable {
         loggingEventCache.invalidateAll();
     }
 
+    private void defineSuppressionWindowProperties(ConfigDef defs) {
+        defs.define(DURATION_PROPERTY,
+                ConfigDef.Type.STRING,
+                Duration.ofSeconds(1).toString(),
+                ConfigDef.CompositeValidator.of(
+                        new ConfigDef.NonEmptyString(),
+                        (name, value) -> Duration.parse((String) value)),
+                ConfigDef.Importance.LOW,
+                "The duration over which repeated messages should be suppressed.");
+        defs.define(EVENT_COUNT_PROPERTY,
+                ConfigDef.Type.INT,
+                5000,
+                ConfigDef.Range.between(0, 100000),
+                ConfigDef.Importance.LOW,
+                "A cap on the number of different event suppression windows to hold.");
+
+        defs.define(APIS_PROPERTY,
+                ConfigDef.Type.STRING,
+                "PRODUCE,FETCH",
+                new ConfigDef.NonEmptyString(),
+                ConfigDef.Importance.LOW,
+                "THe APIs for which we should suppress *duplicate* events");
+    }
+
+    private boolean shouldSuppressDuplicates(AuthorizableRequestContext requestContext) {
+        return suppressApis.contains(ApiKeys.forId(requestContext.requestType()));
+    }
+
+    private boolean shouldLog(Action action, boolean authorized) {
+        if (authorized) {
+            return action.logIfAllowed();
+        } else {
+            return action.logIfDenied();
+        }
+    }
+
+    private void suppressDuplicates(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
+        final ResourcePattern resourcePattern = action.resourcePattern();
+        final CacheKey cacheKey = new CacheKey(resourcePattern.name(), resourcePattern.resourceType(), action.operation(), requestContext.principal(), requestContext.requestType(), requestContext.listenerName(), authorized);
+        final CacheEntry cacheEntry;
+        try {
+            cacheEntry = loggingEventCache.get(cacheKey, () -> {
+                //  Log first entry immediately to ensure the logs still read sensibly
+                logAtLevel(requestContext, action, authorized);
+                return new CacheEntry(
+                        logLevelFor(requestContext, action),
+                        (suppressedCount, windowStart, windowEnd) -> buildLogMessage(requestContext, action, authorized, suppressedCount, windowStart, windowEnd));
+
+            });
+            cacheEntry.repeated();
+        } catch (ExecutionException e) {
+            log.warn("Error suppressing repeated log message, logging immediately. Due to {}", e.getMessage(), e);
+            logAtLevel(requestContext, action, authorized);
+        }
+    }
+
     private void logAtLevel(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
         logAtLevel(requestContext, action, "", authorized);
     }
 
     private void configureRepeatedMessageSuppression(AbstractConfig configParser) {
-        final int eventCount = configParser.getInt(LOGGING_PREFIX + "suppressionWindow.eventCount");
-        final Duration cacheDuration = Duration.parse(configParser.getString(LOGGING_PREFIX + "suppressionWindow.duration"));
-        final String apisCsv = configParser.getString(LOGGING_PREFIX + "suppressionWindow.apis");
+        final int eventCount = configParser.getInt(EVENT_COUNT_PROPERTY);
+        final Duration cacheDuration = Duration.parse(configParser.getString(DURATION_PROPERTY));
+        final String apisCsv = configParser.getString(APIS_PROPERTY);
         final Set<ApiKeys> configuredApis = StreamSupport.stream(CSV_SPLITTER.split(apisCsv).spliterator(), false).map(ApiKeys::valueOf).collect(Collectors.toSet());
 
         suppressApis = Sets.immutableEnumSet(configuredApis);
