@@ -5,8 +5,6 @@ import com.google.common.base.Splitter;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalListener;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Sets;
 import kafka.security.authorizer.AclEntry;
 import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.acl.AclOperation;
@@ -61,7 +59,7 @@ public class AuditLoggingController implements Configurable, Closeable {
     final Map<ResourceType, List<AclLoggingConfig>> aclLoggingMap = new EnumMap<>(ResourceType.class);
 
     private Cache<CacheKey, CacheEntry> loggingEventCache;
-    private ImmutableSet<ApiKeys> suppressApis;
+    private Set<ApiKeys> suppressApis = Collections.emptySet();
 
     @Override
     public void configure(Map<String, ?> configs) {
@@ -220,9 +218,8 @@ public class AuditLoggingController implements Configurable, Closeable {
         final int eventCount = configParser.getInt(EVENT_COUNT_PROPERTY);
         final Duration cacheDuration = Duration.parse(configParser.getString(DURATION_PROPERTY));
         final String apisCsv = configParser.getString(APIS_PROPERTY);
-        final Set<ApiKeys> configuredApis = StreamSupport.stream(CSV_SPLITTER.split(apisCsv).spliterator(), false).map(ApiKeys::valueOf).collect(Collectors.toSet());
+        suppressApis = StreamSupport.stream(CSV_SPLITTER.split(apisCsv).spliterator(), false).map(ApiKeys::valueOf).collect(Collectors.toUnmodifiableSet());
 
-        suppressApis = Sets.immutableEnumSet(configuredApis);
         loggingEventCache = CacheBuilder.newBuilder()
                 .maximumSize(eventCount)
                 .expireAfterWrite(cacheDuration)
