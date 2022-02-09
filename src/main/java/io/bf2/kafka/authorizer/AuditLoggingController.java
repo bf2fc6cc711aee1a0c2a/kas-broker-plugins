@@ -13,6 +13,7 @@ import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.protocol.ApiKeys;
+import org.apache.kafka.common.resource.ResourcePattern;
 import org.apache.kafka.common.resource.ResourceType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.SecurityUtils;
@@ -57,7 +58,7 @@ public class AuditLoggingController implements Configurable, Closeable {
     final Map<ResourceType, List<AclLoggingConfig>> aclLoggingMap = new EnumMap<>(ResourceType.class);
 
     private Cache<CacheKey, CacheEntry> loggingEventCache;
-    private ImmutableSet<ApiKeys> suppressOperations;
+    private ImmutableSet<ApiKeys> suppressApis;
 
     @Override
     public void configure(Map<String, ?> configs) {
@@ -110,39 +111,50 @@ public class AuditLoggingController implements Configurable, Closeable {
     }
 
     public void logAuditMessage(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
-        if ((authorized && action.logIfAllowed()) ||
-                (!authorized && action.logIfDenied())) {
-            final ApiKeys apiKey = ApiKeys.forId(requestContext.requestType());
-            if (suppressOperations.contains(apiKey)) {
-                final CacheKey cacheKey = new CacheKey(action.resourcePattern().name(), action.operation(), requestContext.principal(), requestContext.requestType(), requestContext.listenerName(), authorized);
-                final CacheEntry cacheEntry;
-                try {
-                    cacheEntry = loggingEventCache.get(cacheKey, () -> {
-                        //  Log first entry immediately to ensure the logs still read sensibly
-                        logAtAllowedLevel(logLevelFor(requestContext, action),
-                                () -> buildLogMessage(requestContext, action, authorized));
-                        return new CacheEntry(
-                                logLevelFor(requestContext, action),
-                                (suppressedCount, windowStart, windowEnd) -> buildLogMessage(requestContext, action, authorized, suppressedCount, windowStart, windowEnd));
-
-                    });
-                    cacheEntry.repeated();
-                } catch (ExecutionException e) {
-                    log.warn("Error suppressing repeated log message, logging immediately. Due to {}", e.getMessage(), e);
-                    logAtAllowedLevel(logLevelFor(requestContext, action),
-                            () -> buildLogMessage(requestContext, action, authorized));
-                }
-            } else {
-                logAtAllowedLevel(logLevelFor(requestContext, action),
-                        () -> buildLogMessage(requestContext, action, authorized));
-            }
+        if (shouldLog(action, authorized) && shouldSuppressDuplicates(requestContext)) {
+            suppressDuplicates(requestContext, action, authorized);
+        } else if (shouldLog(action, authorized)) {
+            logAtLevel(logLevelFor(requestContext, action),
+                    () -> buildLogMessage(requestContext, action, authorized));
         } else if (auditLogger.isTraceEnabled()) {
             auditLogger.trace(buildLogMessage(requestContext, action, authorized));
         }
     }
 
-    public void logAtLevel(AuthorizableRequestContext requestContext, Action action, String prefox, boolean authorized) {
-        logAtAllowedLevel(logLevelFor(requestContext, action), () -> prefox + buildLogMessage(requestContext, action, authorized));
+    private boolean shouldSuppressDuplicates(AuthorizableRequestContext requestContext) {
+        return suppressApis.contains(ApiKeys.forId(requestContext.requestType()));
+    }
+
+    private boolean shouldLog(Action action, boolean authorized) {
+        if (authorized) {
+            return action.logIfAllowed();
+        } else {
+            return action.logIfDenied();
+        }
+    }
+
+    private void suppressDuplicates(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
+        final ResourcePattern resourcePattern = action.resourcePattern();
+        final CacheKey cacheKey = new CacheKey(resourcePattern.name(), resourcePattern.resourceType(), action.operation(), requestContext.principal(), requestContext.requestType(), requestContext.listenerName(), authorized);
+        final CacheEntry cacheEntry;
+        try {
+            cacheEntry = loggingEventCache.get(cacheKey, () -> {
+                //  Log first entry immediately to ensure the logs still read sensibly
+                logAtLevel(requestContext, action, authorized);
+                return new CacheEntry(
+                        logLevelFor(requestContext, action),
+                        (suppressedCount, windowStart, windowEnd) -> buildLogMessage(requestContext, action, authorized, suppressedCount, windowStart, windowEnd));
+
+            });
+            cacheEntry.repeated();
+        } catch (ExecutionException e) {
+            log.warn("Error suppressing repeated log message, logging immediately. Due to {}", e.getMessage(), e);
+            logAtLevel(requestContext, action, authorized);
+        }
+    }
+
+    public void logAtLevel(AuthorizableRequestContext requestContext, Action action, String prefix, boolean authorized) {
+        logAtLevel(logLevelFor(requestContext, action), () -> prefix + buildLogMessage(requestContext, action, authorized));
     }
 
     Level logLevelFor(AuthorizableRequestContext requestContext, Action action) {
@@ -158,7 +170,7 @@ public class AuditLoggingController implements Configurable, Closeable {
                 .orElse(Level.INFO);
     }
 
-    void logAtAllowedLevel(Level lvl, Supplier<String> msg) {
+    void logAtLevel(Level lvl, Supplier<String> msg) {
         switch (lvl) {
             case ERROR:
                 if (auditLogger.isErrorEnabled()) {
@@ -193,13 +205,17 @@ public class AuditLoggingController implements Configurable, Closeable {
         loggingEventCache.invalidateAll();
     }
 
+    private void logAtLevel(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
+        logAtLevel(requestContext, action, "", authorized);
+    }
+
     private void configureRepeatedMessageSuppression(AbstractConfig configParser) {
         final int eventCount = configParser.getInt(LOGGING_PREFIX + "suppressionWindow.eventCount");
         final Duration cacheDuration = Duration.parse(configParser.getString(LOGGING_PREFIX + "suppressionWindow.duration"));
         final String apisCsv = configParser.getString(LOGGING_PREFIX + "suppressionWindow.apis");
-        final Set<ApiKeys> configuredOperations = StreamSupport.stream(CSV_SPLITTER.split(apisCsv).spliterator(), false).map(ApiKeys::valueOf).collect(Collectors.toSet());
+        final Set<ApiKeys> configuredApis = StreamSupport.stream(CSV_SPLITTER.split(apisCsv).spliterator(), false).map(ApiKeys::valueOf).collect(Collectors.toSet());
 
-        suppressOperations = Sets.immutableEnumSet(configuredOperations);
+        suppressApis = Sets.immutableEnumSet(configuredApis);
         loggingEventCache = CacheBuilder.newBuilder()
                 .maximumSize(eventCount)
                 .expireAfterWrite(cacheDuration)
@@ -242,14 +258,16 @@ public class AuditLoggingController implements Configurable, Closeable {
 
     private static final class CacheKey {
         private final String resourceName;
+        private final ResourceType resourceType;
         private final AclOperation aclOperation;
         private final KafkaPrincipal principal;
         private final ApiKeys apiKey;
         private final String listenerName;
         private final boolean authorized;
 
-        private CacheKey(String resourceName, AclOperation aclOperation, KafkaPrincipal principal, int requestType, String listenerName, boolean authorized) {
+        private CacheKey(String resourceName, ResourceType resourceType, AclOperation aclOperation, KafkaPrincipal principal, int requestType, String listenerName, boolean authorized) {
             this.resourceName = resourceName;
+            this.resourceType = resourceType;
             this.aclOperation = aclOperation;
             this.principal = principal;
             this.apiKey = ApiKeys.forId(requestType);
@@ -266,12 +284,12 @@ public class AuditLoggingController implements Configurable, Closeable {
                 return false;
             }
             CacheKey cacheKey = (CacheKey) o;
-            return authorized == cacheKey.authorized && Objects.equals(resourceName, cacheKey.resourceName) && aclOperation == cacheKey.aclOperation && Objects.equals(principal, cacheKey.principal) && apiKey == cacheKey.apiKey && Objects.equals(listenerName, cacheKey.listenerName);
+            return authorized == cacheKey.authorized && Objects.equals(resourceName, cacheKey.resourceName) && resourceType == cacheKey.resourceType && aclOperation == cacheKey.aclOperation && Objects.equals(principal, cacheKey.principal) && apiKey == cacheKey.apiKey && Objects.equals(listenerName, cacheKey.listenerName);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(resourceName, aclOperation, principal, apiKey, listenerName, authorized);
+            return Objects.hash(resourceName, resourceType, aclOperation, principal, apiKey, listenerName, authorized);
         }
     }
 
@@ -304,7 +322,7 @@ public class AuditLoggingController implements Configurable, Closeable {
             final long messageCount = suppressionCounter.sumThenReset();
             if (messageCount > 1) {
                 //Given we logged the event which created the window there are N-1 events covered by the window
-                logAtAllowedLevel(logLevel, () -> messageGenerator.generate(messageCount - 1, firstEntry, finalEntry));
+                logAtLevel(logLevel, () -> messageGenerator.generate(messageCount - 1, firstEntry, finalEntry));
             }
         }
     }
