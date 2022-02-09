@@ -1,5 +1,6 @@
 package io.bf2.kafka.authorizer;
 
+import com.google.common.collect.Maps;
 import io.bf2.kafka.authorizer.VerifiableAppenderExtension.LoggedEvents;
 import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -21,6 +22,7 @@ import org.slf4j.event.Level;
 import java.net.InetAddress;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -323,6 +325,29 @@ class AuditLoggingControllerTest {
         assertDoesNotThrow(freshController::close);
 
         //Then
+    }
+
+    @Test
+    void shouldOverrideDefaultsWithConfiguration(@LoggedEvents List<LoggingEvent> loggingEvents) {
+        //Given
+        final Properties properties = new Properties();
+        //specifically test the APIs property as that is externally observable.
+        properties.setProperty("strimzi.authorization.custom-authorizer.acl.logging.suppressionWindow.apis", "");
+        Map<String, String> customConfig = Maps.fromProperties(properties);
+        auditLoggingController.configure(customConfig);
+
+        //When
+        final int eventCount = 10;
+        final int minLoggedEventCount = loggingEvents.size() + eventCount;
+
+        for (int i = 0; i < eventCount; i++) {
+            auditLoggingController.logAuditMessage(fetchRequestContext, infoAction, true);
+        }
+        //When
+        auditLoggingController.evictWindowedEvents();
+
+        //Then
+        assertEquals(minLoggedEventCount, loggingEvents.size());
     }
 
     @SuppressWarnings("SameParameterValue")

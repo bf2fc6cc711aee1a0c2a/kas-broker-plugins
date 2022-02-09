@@ -50,9 +50,9 @@ public class AuditLoggingController implements Configurable, Closeable {
     private static final Logger log = LoggerFactory.getLogger(AuditLoggingController.class);
     private static final Logger auditLogger = LoggerFactory.getLogger("AuditEvents");
     private static final String LOGGING_PREFIX = ACL_PREFIX + "logging.";
-    public static final String APIS_PROPERTY = LOGGING_PREFIX + "suppressionWindow.apis";
-    public static final String DURATION_PROPERTY = LOGGING_PREFIX + "suppressionWindow.duration";
-    public static final String EVENT_COUNT_PROPERTY = LOGGING_PREFIX + "suppressionWindow.eventCount";
+    private static final String APIS_PROPERTY = LOGGING_PREFIX + "suppressionWindow.apis";
+    private static final String DURATION_PROPERTY = LOGGING_PREFIX + "suppressionWindow.duration";
+    private static final String EVENT_COUNT_PROPERTY = LOGGING_PREFIX + "suppressionWindow.eventCount";
     private static final Pattern ACL_LOGGING_PATTERN = Pattern.compile(Pattern.quote(LOGGING_PREFIX) + "\\d+");
     private static final Splitter CSV_SPLITTER = Splitter.on(",").omitEmptyStrings().trimResults();
     private static final MessageFormat MESSAGE_FORMAT = new MessageFormat("Principal = {0} is {1} Operation = {2} from host = {3} via listener {4} on resource = {5}{6}{7}{8}{9} for request = {10} with resourceRefCount = {11}{12,choice,0#|1# suppressed log event original at {13,date,short} {13,time,medium}|1< with {12,number,integer} identical entries suppressed between {13,date,short} {13,time,medium} and {14,date,short} {14,time,medium}}");
@@ -175,7 +175,7 @@ public class AuditLoggingController implements Configurable, Closeable {
         defs.define(APIS_PROPERTY,
                 ConfigDef.Type.STRING,
                 "PRODUCE,FETCH",
-                new ConfigDef.NonEmptyString(),
+                new ConfigDef.NonNullValidator(),
                 ConfigDef.Importance.LOW,
                 "THe APIs for which we should suppress *duplicate* events");
     }
