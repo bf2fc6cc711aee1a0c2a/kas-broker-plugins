@@ -95,7 +95,7 @@ public class AuditLoggingController implements Configurable, Closeable {
         if (shouldLog(action, authorized) && shouldSuppressDuplicates(requestContext)) {
             suppressDuplicates(requestContext, action, authorized);
         } else if (shouldLog(action, authorized)) {
-            logAtLevel(logLevelFor(requestContext, action),
+            logAtLevel(logLevelFor(requestContext, action, authorized),
                     () -> buildLogMessage(requestContext, action, authorized));
         } else if (auditLogger.isTraceEnabled()) {
             auditLogger.trace(buildLogMessage(requestContext, action, authorized));
@@ -103,10 +103,10 @@ public class AuditLoggingController implements Configurable, Closeable {
     }
 
     public void logAtLevel(AuthorizableRequestContext requestContext, Action action, String prefix, boolean authorized) {
-        logAtLevel(logLevelFor(requestContext, action), () -> prefix + buildLogMessage(requestContext, action, authorized));
+        logAtLevel(logLevelFor(requestContext, action, authorized), () -> prefix + buildLogMessage(requestContext, action, authorized));
     }
 
-    Level logLevelFor(AuthorizableRequestContext requestContext, Action action) {
+    Level logLevelFor(AuthorizableRequestContext requestContext, Action action, boolean authorized) {
         return aclLoggingMap.getOrDefault(action.resourcePattern().resourceType(), Collections.emptyList())
                 .stream()
                 .filter(binding -> binding.matchesResource(action.resourcePattern().name())
@@ -116,6 +116,7 @@ public class AuditLoggingController implements Configurable, Closeable {
                         && binding.matchesListener(requestContext.listenerName()))
                 .min(AclLoggingConfig::prioritize)
                 .map(AclLoggingConfig::getLevel)
+                .filter(lvl -> authorized || lvl.toInt() >= Level.INFO.toInt())
                 .orElse(Level.INFO);
     }
 
@@ -199,7 +200,7 @@ public class AuditLoggingController implements Configurable, Closeable {
                 //  Log first entry immediately to ensure the logs still read sensibly
                 logAtLevel(requestContext, action, authorized);
                 return new CacheEntry(
-                        logLevelFor(requestContext, action),
+                        logLevelFor(requestContext, action, authorized),
                         (suppressedCount, windowStart, windowEnd) -> buildLogMessage(requestContext, action, authorized, suppressedCount, windowStart, windowEnd));
 
             });

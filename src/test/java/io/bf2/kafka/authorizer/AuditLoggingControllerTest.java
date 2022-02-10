@@ -56,11 +56,13 @@ class AuditLoggingControllerTest {
 
     @ParameterizedTest
     @CsvSource({
-            "Test log level for unspecified binding is INFO, INFO, IDEMPOTENT_WRITE, OFFSET_COMMIT, CLUSTER, kafka-cluster, User:test",
-            "Test log level for specified binding is as expected, DEBUG, DESCRIBE, METADATA, TOPIC, myopictopic, User:test",
-            "Test can specify fetch API, TRACE, CLUSTER_ACTION, FETCH, CLUSTER, kafka-cluster, User:test",
-            "Test can turn off some operations per topic, TRACE, DESCRIBE, METADATA, TOPIC, __strimzi_canary, User:canary-something",
-            "Test prioritization considering level, DEBUG, CLUSTER_ACTION, ALTER_ISR, CLUSTER, kafka-cluster, User:test",
+            "Test log level for unspecified binding is INFO, INFO, IDEMPOTENT_WRITE, OFFSET_COMMIT, CLUSTER, kafka-cluster, User:test, true",
+            "Test log level for specified binding is as expected, DEBUG, DESCRIBE, METADATA, TOPIC, myopictopic, User:test, true",
+            "Test can specify fetch API, TRACE, CLUSTER_ACTION, FETCH, CLUSTER, kafka-cluster, User:test, true",
+            "Test can turn off some operations per topic, TRACE, DESCRIBE, METADATA, TOPIC, __strimzi_canary, User:canary-something, true",
+            "Test prioritization considering level, DEBUG, CLUSTER_ACTION, ALTER_ISR, CLUSTER, kafka-cluster, User:test, true",
+            "Test override can't go below INFO, INFO, CLUSTER_ACTION, ALTER_ISR, CLUSTER, kafka-cluster, User:test, false",
+            "Test override can go above INFO, WARN, READ, METADATA, TOPIC, important_topic, User:bob, false",
     })
     void testGetLogLevel(String title,
                          Level expLevel,
@@ -68,13 +70,14 @@ class AuditLoggingControllerTest {
                          ApiKeys api,
                          ResourceType resourceType,
                          String resourceName,
-                         String principalName) {
+                         String principalName,
+                         boolean authorized) {
         Action action = new Action(AclOperation.fromString(operation),
                 new ResourcePattern(resourceType, resourceName, PatternType.LITERAL), 0, true, true);
         when(fetchRequestContext.requestType()).thenReturn((int) api.id);
         when(fetchRequestContext.principal()).thenReturn(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, principalName));
 
-        assertEquals(expLevel, auditLoggingController.logLevelFor(fetchRequestContext, action), title);
+        assertEquals(expLevel, auditLoggingController.logLevelFor(fetchRequestContext, action, authorized), title);
     }
 
     @Test
