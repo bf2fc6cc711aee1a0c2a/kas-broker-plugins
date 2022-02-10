@@ -3,11 +3,6 @@
  */
 package io.bf2.kafka.authorizer;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.when;
-
 import org.apache.kafka.common.acl.AccessControlEntry;
 import org.apache.kafka.common.acl.AclBinding;
 import org.apache.kafka.common.acl.AclBindingFilter;
@@ -30,7 +25,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mockito;
-import org.slf4j.event.Level;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -45,6 +39,9 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.when;
 
 class CustomAclAuthorizerTest {
 
@@ -271,41 +268,6 @@ class CustomAclAuthorizerTest {
                     .map(Optional::get)
                     .allMatch(e -> e instanceof ApiException
                             && CustomAclAuthorizer.CREATE_ACL_INVALID_BINDING.equals(e.getMessage())));
-        }
-    }
-
-    @ParameterizedTest
-    @CsvSource({
-            "Test log level for unspecified binding is INFO, INFO, IDEMPOTENT_WRITE, OFFSET_COMMIT, CLUSTER, kafka-cluster, User:test",
-            "Test log level for specified binding is as expected, DEBUG, DESCRIBE, METADATA, TOPIC, myopictopic, User:test",
-            "Test can specify fetch API, TRACE, CLUSTER_ACTION, FETCH, CLUSTER, kafka-cluster, User:test",
-            "Test can turn off some operations per topic, TRACE, DESCRIBE, METADATA, TOPIC, __strimzi_canary, User:canary-something",
-            "Test prioritization considering level, DEBUG, CLISTER_ACTION, ALTER_ISR, CLUSTER, kafka-cluster, User:test",
-    })
-    void testGetLogLevel(String title,
-            Level expLevel,
-            String operation,
-            ApiKeys api,
-            ResourceType resourceType,
-            String resourceName,
-            String principalName) throws IOException {
-
-        new KafkaPrincipal(KafkaPrincipal.USER_TYPE, principalName);
-
-        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
-            auth.configure(config);
-
-            AuthorizableRequestContext rc = Mockito.mock(AuthorizableRequestContext.class);
-            Mockito.when(rc.clientAddress()).thenReturn(InetAddress.getLoopbackAddress());
-            Mockito.when(rc.listenerName()).thenReturn("security-9095");
-            Mockito.when(rc.principal()).thenReturn(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "owner1"));
-            Mockito.when(rc.requestType()).thenReturn((int) api.id);
-
-            Action action = new Action(AclOperation.fromString(operation),
-                    new ResourcePattern(resourceType, resourceName, PatternType.LITERAL), 0, true, true);
-
-            assertEquals(2, auth.aclLoggingMap.size(), title);
-            assertEquals(expLevel, auth.logLevelFor(rc, action), title);
         }
     }
 
