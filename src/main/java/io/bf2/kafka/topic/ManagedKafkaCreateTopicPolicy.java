@@ -1,31 +1,44 @@
+/*
+ * License: Apache License 2.0 (see the file LICENSE or http://apache.org/licenses/LICENSE-2.0.html).
+ */
 package io.bf2.kafka.topic;
 
+import io.bf2.kafka.common.LocalAdminClient;
+import io.bf2.kafka.common.PartitionCounter;
 import org.apache.kafka.clients.admin.Admin;
-import org.apache.kafka.clients.admin.ListTopicsOptions;
-import org.apache.kafka.clients.admin.TopicListing;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy;
 
-import java.util.List;
+import java.net.UnknownHostException;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
-import java.util.stream.Collectors;
 
 public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
     protected static final String DEFAULT_REPLICATION_FACTOR = "default.replication.factor";
     protected static final String MIN_INSYNC_REPLICAS = "min.insync.replicas";
-    protected static final String MAX_PARTITONS = "max.partitions";
-    private Map<String, ?> configs;
+    private volatile Map<String, ?> configs;
+    private Admin admin;
+    private int maxPartitions;
 
     @Override
     public void configure(Map<String, ?> configs) {
         this.configs = configs;
+
+        maxPartitions = PartitionCounter.getMaxPartitions(configs);
+
+        try {
+            admin = LocalAdminClient.create(configs);
+        } catch (UnknownHostException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
     public void close() throws Exception {
+        if (admin != null) {
+            admin.close();
+        }
     }
 
     @Override
@@ -56,17 +69,12 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
         // if not present, cluster default value taken automatically, otherwise
         // only allow isr if the defined value >= to default isr value configured and <= system replication
         // factor, as there is no meaning setting this value higher than replication factor.
-        if(isr.isPresent() && defaultIsr.isPresent()) {
-            if (isr.get() < defaultIsr.get() || isr.get() > defaultReplicationFactor().get()) {
-                throw new PolicyViolationException(String.format("Topic %s configured with invalid minimum insync replicas %d, recommended minimum insync replicas are %d", requestMetadata.topic(), isr.get(), defaultIsr.get()));
-            }
+        if ((isr.isPresent() && defaultIsr.isPresent()) && (isr.get() < defaultIsr.get() || isr.get() > defaultReplicationFactor().get())) {
+            throw new PolicyViolationException(String.format("Topic %s configured with invalid minimum insync replicas %d, recommended minimum insync replicas are %d", requestMetadata.topic(), isr.get(), defaultIsr.get()));
         }
     }
 
     private void validateNumPartitions(RequestMetadata requestMetadata) throws PolicyViolationException {
-        long maxPartitions = getConfig(MAX_PARTITONS, configs)
-                .map(v -> Long.valueOf(v.toString()))
-                .orElse(-1L);
 
         if (maxPartitions < 1) {
             return;
@@ -76,34 +84,24 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
                 .map(Map::size)
                 .orElseGet(requestMetadata::numPartitions);
 
+        String exceptionMessage = policyViolationExceptionMessage(requestMetadata.topic(), addPartitions, maxPartitions);
+
         if (addPartitions > maxPartitions) {
-            throw new PolicyViolationException(String.format("Topic %s with %d partitions exceeds the cluster partition limit of %d",
-                    requestMetadata.topic(), addPartitions, maxPartitions));
+            throw new PolicyViolationException(exceptionMessage);
         }
 
-        try (Admin admin = Admin.create(Map.of(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "127.0.0.1:9096"))) {
-            List<String> topicNames = admin.listTopics(new ListTopicsOptions().listInternal(false))
-                .listings()
-                .get()
-                .stream()
-                .map(TopicListing::name)
-                .filter(name -> !name.startsWith("__redhat_"))
-                .collect(Collectors.toList());
-
-            long usedPartitions = admin.describeTopics(topicNames)
-                .all()
-                .get()
-                .values()
-                .stream()
-                .map(description -> (long) description.partitions().size())
-                .reduce(0L, Long::sum);
-
+        try {
+            long usedPartitions = PartitionCounter.countExistingPartitions(admin);
             if (usedPartitions + addPartitions > maxPartitions) {
-                throw new PolicyViolationException(String.format("Creating topic %s with %d partitions exceeds the cluster partition limit of %d",
-                        requestMetadata.topic(), addPartitions, maxPartitions));
+                throw new PolicyViolationException(exceptionMessage);
             }
         } catch (InterruptedException | ExecutionException e) {
 
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+
+            throw new PolicyViolationException(exceptionMessage, e);
         }
     }
 
@@ -119,5 +117,9 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
 
     private Optional<Object> getConfig(String name, Map<String, ?> configs){
         return Optional.ofNullable(configs.get(name));
+    }
+
+    private String policyViolationExceptionMessage(String topic, int partitions, int maxPartitions) {
+        return String.format("Topic %s with %d partitions would exceed the cluster partition limit of %d", topic, partitions, maxPartitions);
     }
 }
