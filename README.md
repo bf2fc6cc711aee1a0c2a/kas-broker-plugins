@@ -54,7 +54,7 @@ To configure this with Strimzi, this component needs be built and have the maven
 ### Release Branch
 *Optional - only required when a new release branch is needed -- for patch releases, skip this branch creation, and instead re-use the existing minor release branch*.
 
-If you are starting on main branch, create a new branch from the main. For example `0.3.x`.
+If you are starting on main branch, create a new branch from the main. For example `2.5.x`.
 
 ```shell
 git checkout -b 2.5.x main
