@@ -6,6 +6,9 @@ package io.bf2.kafka.authorizer;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.kafka.clients.admin.Admin;
+import org.apache.kafka.clients.admin.TopicListing;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.Endpoint;
 import org.apache.kafka.common.acl.AccessControlEntryFilter;
 import org.apache.kafka.common.acl.AclBinding;
@@ -39,9 +42,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -98,6 +103,9 @@ import java.util.stream.IntStream;
  */
 public class CustomAclAuthorizer implements Authorizer {
 
+    private static final int CREATE_PARTITIONS_APIKEY = 37;
+    private static final String MAX_PARTITONS = "max.partitions";
+
     private static final Logger log = LoggerFactory.getLogger(CustomAclAuthorizer.class);
 
     static final String CREATE_ACL_INVALID_PRINCIPAL = "Invalid ACL principal name";
@@ -128,6 +136,8 @@ public class CustomAclAuthorizer implements Authorizer {
 
     final Map<String, List<String>> allowedAcls = new HashMap<>();
     final Set<String> aclPrincipals = new HashSet<>();
+
+    private OptionalInt maxPartitions;
 
     /**
      * For backward-compatibility with {@link GlobalAclAuthorizer}.
@@ -160,6 +170,12 @@ public class CustomAclAuthorizer implements Authorizer {
         loggingController.configure(configs);
 
         addAllowedListeners(configs);
+
+        if (configs.containsKey(MAX_PARTITONS)) {
+            maxPartitions = OptionalInt.of((int) configs.get(MAX_PARTITONS));
+        } else {
+            maxPartitions = OptionalInt.empty();
+        }
 
         if (configs.containsKey(RESOURCE_OPERATIONS_KEY)) {
             ObjectMapper mapper = new ObjectMapper();
@@ -286,6 +302,33 @@ public class CustomAclAuthorizer implements Authorizer {
     }
 
     private AuthorizationResult authorizeAction(AuthorizableRequestContext requestContext, Action action) {
+        if (requestContext.requestType() == CREATE_PARTITIONS_APIKEY && maxPartitions.isPresent() && maxPartitions.getAsInt() > 0) {
+            try (Admin admin = Admin.create(Map.of(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "127.0.0.1:9096"))) {
+                List<String> topicNames = admin.listTopics()
+                        .listings()
+                        .get()
+                        .stream()
+                        .map(TopicListing::name)
+                        .filter(name -> !name.startsWith("__redhat_"))
+                        .collect(Collectors.toList());
+
+                long usedPartitions = admin.describeTopics(topicNames)
+                        .all()
+                        .get()
+                        .values()
+                        .stream()
+                        .map(description -> (long) description.partitions().size())
+                        .reduce(0L, Long::sum);
+
+                if (usedPartitions >= maxPartitions.getAsInt()) {
+                    loggingController.logAtLevel(requestContext, action, "reached partition limit ", false);
+                    return AuthorizationResult.DENIED;
+                }
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
         // is super user allow any operation
         if (delegate.isSuperUser(requestContext.principal())) {
             loggingController.logAtLevel(requestContext, action, "super.user ", true);
