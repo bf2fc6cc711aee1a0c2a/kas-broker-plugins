@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy.RequestMetadata;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -24,6 +25,11 @@ class ManagedKafkaCreateTopicPolicyTest {
                 "strimzi.authorization.custom-authorizer.adminclient-listener.port", "9090",
                 "strimzi.authorization.custom-authorizer.adminclient-listener.protocol", "PLAINTEXT");
         policy.configure(configs);
+    }
+
+    @AfterEach
+    void tearDown() {
+        policy.close();
     }
 
     @Test

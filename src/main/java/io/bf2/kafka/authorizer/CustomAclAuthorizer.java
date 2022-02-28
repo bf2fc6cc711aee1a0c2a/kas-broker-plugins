@@ -6,9 +6,7 @@ package io.bf2.kafka.authorizer;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.bf2.kafka.common.LocalAdminClient;
 import io.bf2.kafka.common.PartitionCounter;
-import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.common.Endpoint;
 import org.apache.kafka.common.acl.AccessControlEntryFilter;
 import org.apache.kafka.common.acl.AclBinding;
@@ -33,7 +31,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -46,7 +43,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -146,8 +142,8 @@ public class CustomAclAuthorizer implements Authorizer {
     final kafka.security.authorizer.AclAuthorizer delegate;
     final AuditLoggingController loggingController;
 
-    private volatile Admin admin;
     private volatile int maxPartitions;
+    PartitionCounter partitionCounter;
 
     public CustomAclAuthorizer(kafka.security.authorizer.AclAuthorizer delegate) {
         this.delegate = delegate;
@@ -170,11 +166,8 @@ public class CustomAclAuthorizer implements Authorizer {
 
         addAllowedListeners(configs);
 
-        try {
-            admin = LocalAdminClient.create(configs);
-        } catch (UnknownHostException e) {
-            throw new RuntimeException(e);
-        }
+        partitionCounter = new PartitionCounter(configs);
+        partitionCounter.startPeriodicCounter(PartitionCounter.DEFAULT_SCHEDULE_PERIOD_MILLIS);
 
         maxPartitions = PartitionCounter.getMaxPartitions(configs);
 
@@ -303,24 +296,10 @@ public class CustomAclAuthorizer implements Authorizer {
     }
 
     private AuthorizationResult authorizeAction(AuthorizableRequestContext requestContext, Action action) {
-        if (requestContext.requestType() == CREATE_PARTITIONS_APIKEY && maxPartitions > 0) {
-            try {
-                long usedPartitions = PartitionCounter.countExistingPartitions(admin);
-
-                if (usedPartitions >= maxPartitions) {
-                    loggingController.logAtLevel(requestContext, action, "reached partition limit ", false);
-                    return AuthorizationResult.DENIED;
-                }
-            } catch (InterruptedException | ExecutionException e) {
-                log.warn("Exception when trying to determine existing partition count", e);
-                loggingController.logAtLevel(requestContext, action, "failed to determine existing partition count ", false);
-
-                if (e instanceof InterruptedException) {
-                    Thread.currentThread().interrupt();
-                }
-
-                return AuthorizationResult.DENIED;
-            }
+        if ((requestContext.requestType() == CREATE_PARTITIONS_APIKEY && maxPartitions > 0)
+                && (partitionCounter.existingPartitionCount.get() >= maxPartitions)) {
+            loggingController.logAtLevel(requestContext, action, "reached partition limit ", false);
+            return AuthorizationResult.DENIED;
         }
 
         // is super user allow any operation
@@ -491,8 +470,17 @@ public class CustomAclAuthorizer implements Authorizer {
 
     @Override
     public void close() throws IOException {
-        delegate.close();
-        loggingController.close();
-        admin.close();
+        if (delegate != null) {
+            delegate.close();
+        }
+
+        if (loggingController != null) {
+            loggingController.close();
+        }
+
+        if (partitionCounter != null) {
+            partitionCounter.close();
+        }
+
     }
 }

@@ -3,23 +3,19 @@
  */
 package io.bf2.kafka.topic;
 
-import io.bf2.kafka.common.LocalAdminClient;
 import io.bf2.kafka.common.PartitionCounter;
-import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy;
 
-import java.net.UnknownHostException;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ExecutionException;
 
 public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
     protected static final String DEFAULT_REPLICATION_FACTOR = "default.replication.factor";
     protected static final String MIN_INSYNC_REPLICAS = "min.insync.replicas";
     private volatile Map<String, ?> configs;
-    private Admin admin;
     private int maxPartitions;
+    private PartitionCounter partitionCounter;
 
     @Override
     public void configure(Map<String, ?> configs) {
@@ -27,17 +23,14 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
 
         maxPartitions = PartitionCounter.getMaxPartitions(configs);
 
-        try {
-            admin = LocalAdminClient.create(configs);
-        } catch (UnknownHostException e) {
-            throw new RuntimeException(e);
-        }
+        partitionCounter = new PartitionCounter(configs);
+        partitionCounter.startPeriodicCounter(PartitionCounter.DEFAULT_SCHEDULE_PERIOD_MILLIS);
     }
 
     @Override
-    public void close() throws Exception {
-        if (admin != null) {
-            admin.close();
+    public void close() {
+        if (partitionCounter != null) {
+            partitionCounter.close();
         }
     }
 
@@ -90,19 +83,10 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
             throw new PolicyViolationException(exceptionMessage);
         }
 
-        try {
-            long usedPartitions = PartitionCounter.countExistingPartitions(admin);
-            if (usedPartitions + addPartitions > maxPartitions) {
-                throw new PolicyViolationException(exceptionMessage);
-            }
-        } catch (InterruptedException | ExecutionException e) {
-
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
-
-            throw new PolicyViolationException(exceptionMessage, e);
+        if (partitionCounter.existingPartitionCount.get() + addPartitions > maxPartitions) {
+            throw new PolicyViolationException(exceptionMessage);
         }
+
     }
 
     private Optional<Short> defaultIsr() {

@@ -4,6 +4,7 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.github.charithe.kafka.EphemeralKafkaBroker;
+import com.github.charithe.kafka.KafkaHelper;
 import com.google.common.util.concurrent.Futures;
 import io.bf2.kafka.common.LocalAdminClient;
 import io.bf2.kafka.common.PartitionCounter;
@@ -18,14 +19,18 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class ManagedKafkaCreateTopicPolicyIT {
 
     Admin admin;
     Map<String, Object> config;
     EphemeralKafkaBroker broker;
+    PartitionCounter partitionCounter;
     ManagedKafkaCreateTopicPolicy policy;
 
     @BeforeEach
@@ -36,6 +41,13 @@ public class ManagedKafkaCreateTopicPolicyIT {
         Futures.getUnchecked(broker.start());
 
         admin = LocalAdminClient.create(config);
+        KafkaHelper kafkaHelper = KafkaHelper.createFor(broker);
+        Map<String, Object> configs = Stream.concat(kafkaHelper.consumerConfig()
+                .entrySet()
+                .stream(),
+                config.entrySet().stream())
+                .collect(Collectors.toMap(e -> e.getKey().toString(), Entry::getValue));
+        partitionCounter = new PartitionCounter(configs);
 
         policy = new ManagedKafkaCreateTopicPolicy();
     }
@@ -45,6 +57,7 @@ public class ManagedKafkaCreateTopicPolicyIT {
         admin.close();
         broker.stop();
         policy.close();
+        partitionCounter.close();
     }
 
     @Test
@@ -66,9 +79,10 @@ public class ManagedKafkaCreateTopicPolicyIT {
         policy.configure(config);
 
         admin.createTopics(List.of(new NewTopic("test1", Optional.of(998), Optional.empty())));
-        assertEquals(998, PartitionCounter.countExistingPartitions(admin));
+        Thread.sleep(PartitionCounter.DEFAULT_SCHEDULE_PERIOD_MILLIS * 2);
+        assertEquals(998, partitionCounter.countExistingPartitions());
 
-        RequestMetadata ctpRequestMetadata = new RequestMetadata("test1", 3, (short) 3, null, Map.of());
+        RequestMetadata ctpRequestMetadata = new RequestMetadata("test2", 3, (short) 3, null, Map.of());
         assertThrows(PolicyViolationException.class, () -> policy.validate(ctpRequestMetadata));
     }
 
@@ -77,9 +91,10 @@ public class ManagedKafkaCreateTopicPolicyIT {
         policy.configure(config);
 
         admin.createTopics(List.of(new NewTopic("test1", Optional.of(1001), Optional.empty())));
-        assertEquals(1001, PartitionCounter.countExistingPartitions(admin));
+        Thread.sleep(PartitionCounter.DEFAULT_SCHEDULE_PERIOD_MILLIS * 2);
+        assertEquals(1001, partitionCounter.countExistingPartitions());
 
-        RequestMetadata ctpRequestMetadata = new RequestMetadata("test1", 3, (short) 3, null, Map.of());
+        RequestMetadata ctpRequestMetadata = new RequestMetadata("test2", 3, (short) 3, null, Map.of());
         assertThrows(PolicyViolationException.class, () -> policy.validate(ctpRequestMetadata));
     }
 

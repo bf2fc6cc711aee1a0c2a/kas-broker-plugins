@@ -13,7 +13,7 @@ import java.util.stream.Stream;
 
 public class LocalAdminClient {
 
-    public static Admin create(Map<String, ?> configs) throws UnknownHostException {
+    public static Admin create(Map<String, ?> configs) {
         String listenerName =
                 getConfigString(configs, "strimzi.authorization.custom-authorizer.adminclient-listener.name");
         String listenerPort =
@@ -21,7 +21,12 @@ public class LocalAdminClient {
         String listenerSecurityProtocol =
                 getConfigString(configs, "strimzi.authorization.custom-authorizer.adminclient-listener.protocol");
 
-        String bootstrapAddress = String.format("%s:%s", InetAddress.getLocalHost().getCanonicalHostName(), listenerPort);
+        String bootstrapAddress;
+        try {
+            bootstrapAddress = String.format("%s:%s", InetAddress.getLocalHost().getCanonicalHostName(), listenerPort);
+        } catch (UnknownHostException e) {
+            throw new RuntimeException(e);
+        }
 
         Map<String, Object> clientConfig = Stream.concat(
                 Stream.of(

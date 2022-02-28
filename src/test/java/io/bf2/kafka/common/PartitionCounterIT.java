@@ -15,7 +15,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 class PartitionCounterIT {
 
@@ -24,7 +29,8 @@ class PartitionCounterIT {
     @KafkaJunitExtensionConfig(startupMode = StartupMode.WAIT_FOR_STARTUP)
     class BasicTest {
         @Test
-        void testCountExistingPartitions(KafkaHelper kafkaHelper) throws InterruptedException, ExecutionException {
+        void testCountExistingPartitions(KafkaHelper kafkaHelper)
+                throws InterruptedException, ExecutionException, TimeoutException {
             try (Admin admin = Admin.create(kafkaHelper.consumerConfig())) {
                 List<NewTopic> newTopics = List.of(
                         new NewTopic("topic1", 10, (short) 1),
@@ -32,7 +38,19 @@ class PartitionCounterIT {
                 CreateTopicsResult result = admin.createTopics(newTopics);
                 Futures.getUnchecked(result.all());
 
-                assertEquals(20, PartitionCounter.countExistingPartitions(admin));
+                Map<String, Object> config = Stream.concat(kafkaHelper.consumerConfig()
+                        .entrySet()
+                        .stream(),
+                        Stream.of(
+                                Map.entry("strimzi.authorization.custom-authorizer.adminclient-listener.name", "test"),
+                                Map.entry("strimzi.authorization.custom-authorizer.adminclient-listener.port",
+                                        kafkaHelper.kafkaPort()),
+                                Map.entry("strimzi.authorization.custom-authorizer.adminclient-listener.protocol",
+                                        "PLAINTEXT")))
+                        .collect(Collectors.toMap(e -> e.getKey().toString(), Entry::getValue));
+                PartitionCounter partitionCounter = new PartitionCounter(config);
+                assertEquals(20, partitionCounter.countExistingPartitions());
+                partitionCounter.close();
             }
         }
     }
@@ -43,7 +61,7 @@ class PartitionCounterIT {
     class InternalPartitionsTest {
         @Test
         void testOmitsInternalPartitions(KafkaHelper kafkaHelper)
-                throws InterruptedException, ExecutionException {
+                throws InterruptedException, ExecutionException, TimeoutException {
             try (Admin admin = Admin.create(kafkaHelper.consumerConfig())) {
                 List<NewTopic> newTopics = List.of(
                         new NewTopic("topic3", 10, (short) 1),
@@ -52,7 +70,19 @@ class PartitionCounterIT {
                 CreateTopicsResult result = admin.createTopics(newTopics);
                 Futures.getUnchecked(result.all());
 
-                assertEquals(10, PartitionCounter.countExistingPartitions(admin));
+                Map<String, Object> config = Stream.concat(kafkaHelper.consumerConfig()
+                        .entrySet()
+                        .stream(),
+                        Stream.of(
+                                Map.entry("strimzi.authorization.custom-authorizer.adminclient-listener.name", "test"),
+                                Map.entry("strimzi.authorization.custom-authorizer.adminclient-listener.port",
+                                        kafkaHelper.kafkaPort()),
+                                Map.entry("strimzi.authorization.custom-authorizer.adminclient-listener.protocol",
+                                        "PLAINTEXT")))
+                        .collect(Collectors.toMap(e -> e.getKey().toString(), Entry::getValue));
+                PartitionCounter partitionCounter = new PartitionCounter(config);
+                assertEquals(10, partitionCounter.countExistingPartitions());
+                partitionCounter.close();
             }
         }
     }
