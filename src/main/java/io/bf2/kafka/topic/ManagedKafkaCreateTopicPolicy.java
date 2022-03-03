@@ -14,17 +14,26 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
     protected static final String DEFAULT_REPLICATION_FACTOR = "default.replication.factor";
     protected static final String MIN_INSYNC_REPLICAS = "min.insync.replicas";
     private volatile Map<String, ?> configs;
-    private int maxPartitions;
+    private volatile int maxPartitions;
     private PartitionCounter partitionCounter;
+
+    public ManagedKafkaCreateTopicPolicy() {
+    }
+
+    ManagedKafkaCreateTopicPolicy(PartitionCounter partitionCounter) {
+        this();
+        this.partitionCounter = partitionCounter;
+    }
 
     @Override
     public void configure(Map<String, ?> configs) {
         this.configs = configs;
 
-        maxPartitions = PartitionCounter.getMaxPartitions(configs);
+        if (partitionCounter == null) {
+            partitionCounter = PartitionCounter.create(configs);
+        }
 
-        partitionCounter = new PartitionCounter(configs);
-        partitionCounter.startPeriodicCounter(PartitionCounter.DEFAULT_SCHEDULE_PERIOD_MILLIS);
+        maxPartitions = partitionCounter.getMaxPartitions();
     }
 
     @Override
@@ -77,14 +86,14 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
                 .map(Map::size)
                 .orElseGet(requestMetadata::numPartitions);
 
-        String exceptionMessage = policyViolationExceptionMessage(requestMetadata.topic(), addPartitions, maxPartitions);
-
         if (addPartitions > maxPartitions) {
-            throw new PolicyViolationException(exceptionMessage);
+            throw new PolicyViolationException(
+                    policyViolationExceptionMessage(requestMetadata.topic(), addPartitions, maxPartitions));
         }
 
-        if (partitionCounter.existingPartitionCount.get() + addPartitions > maxPartitions) {
-            throw new PolicyViolationException(exceptionMessage);
+        if (partitionCounter.getExistingPartitionCount() + addPartitions > maxPartitions) {
+            throw new PolicyViolationException(
+                    policyViolationExceptionMessage(requestMetadata.topic(), addPartitions, maxPartitions));
         }
 
     }

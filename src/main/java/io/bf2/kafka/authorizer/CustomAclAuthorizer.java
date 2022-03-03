@@ -166,10 +166,9 @@ public class CustomAclAuthorizer implements Authorizer {
 
         addAllowedListeners(configs);
 
-        partitionCounter = new PartitionCounter(configs);
-        partitionCounter.startPeriodicCounter(PartitionCounter.DEFAULT_SCHEDULE_PERIOD_MILLIS);
+        partitionCounter = PartitionCounter.create(configs);
 
-        maxPartitions = PartitionCounter.getMaxPartitions(configs);
+        maxPartitions = partitionCounter.getMaxPartitions();
 
         if (configs.containsKey(RESOURCE_OPERATIONS_KEY)) {
             ObjectMapper mapper = new ObjectMapper();
@@ -297,7 +296,7 @@ public class CustomAclAuthorizer implements Authorizer {
 
     private AuthorizationResult authorizeAction(AuthorizableRequestContext requestContext, Action action) {
         if ((requestContext.requestType() == CREATE_PARTITIONS_APIKEY && maxPartitions > 0)
-                && (partitionCounter.existingPartitionCount.get() >= maxPartitions)) {
+                && (partitionCounter.getExistingPartitionCount() >= maxPartitions)) {
             loggingController.logAtLevel(requestContext, action, "reached partition limit ", false);
             return AuthorizationResult.DENIED;
         }

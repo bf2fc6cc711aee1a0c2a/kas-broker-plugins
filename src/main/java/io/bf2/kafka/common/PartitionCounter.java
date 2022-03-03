@@ -11,43 +11,58 @@ import org.apache.kafka.common.config.ConfigException;
 
 import java.io.Closeable;
 import java.time.Duration;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
-import java.util.Timer;
-import java.util.TimerTask;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class PartitionCounter implements Closeable {
 
-    public static final long DEFAULT_SCHEDULE_PERIOD_MILLIS = 5_000;
+    public static final long SCHEDULE_PERIOD_MILLIS = 10_000;
+    public static final String MAX_PARTITIONS = "max.partitions";
 
-    protected static final String MAX_PARTITONS = "max.partitions";
     private static final String CONSUMER_OFFSETS = "__consumer_offsets";
     private static final String INTERNAL_PARTITION_PREFIX = "__redhat_";
 
     private static final ConfigDef configDef = new ConfigDef()
-            .define(MAX_PARTITONS, ConfigDef.Type.INT, -1, ConfigDef.Importance.MEDIUM, "Max partitions");
+            .define(MAX_PARTITIONS, ConfigDef.Type.INT, -1, ConfigDef.Importance.MEDIUM, "Max partitions");
 
-    private Timer timer;
+    private static PartitionCounter partitionCounter;
+
+    private final int maxPartitions;
+
     private final Admin admin;
 
-    public AtomicLong existingPartitionCount;
+    private AtomicInteger existingPartitionCount;
 
-    public PartitionCounter(Map<String, ?> config) {
-        existingPartitionCount = new AtomicLong(0);
+    private final ScheduledExecutorService scheduler;
+    private ScheduledFuture<?> scheduledPartitionCounter;
+
+    public static synchronized PartitionCounter create(Map<String, ?> config) {
+        if (partitionCounter == null) {
+            partitionCounter = new PartitionCounter(config);
+        }
+        return partitionCounter;
+    }
+
+    PartitionCounter(Map<String, ?> config) {
         this.admin = LocalAdminClient.create(config);
-        this.timer = new Timer("PartitionCounter-Admin-" + Thread.currentThread().getId(), true);
+        existingPartitionCount = new AtomicInteger(0);
+        scheduler = Executors.newScheduledThreadPool(1);
+        maxPartitions = setMaxPartitions(config);
+        startPeriodicCounter();
     }
 
     @Override
     public void close() {
-        if (timer != null) {
-            timer.cancel();
+        if (scheduler != null) {
+            scheduler.shutdownNow();
         }
 
         if (admin != null) {
@@ -55,24 +70,41 @@ public class PartitionCounter implements Closeable {
         }
     }
 
-    public void startPeriodicCounter(long period) {
-        TimerTask task = new TimerTask() {
-
-            @Override
-            public void run() {
-                try {
-                    existingPartitionCount.set(countExistingPartitions());
-                } catch (InterruptedException | ExecutionException | TimeoutException e) {
-                    // TODO Auto-generated catch block
-                    e.printStackTrace();
-                }
-            }
-        };
-
-        timer.schedule(task, new Date(), 10000);
+    /**
+     * @return the existingPartitionCount
+     */
+    public int getExistingPartitionCount() {
+        return existingPartitionCount.get();
     }
 
-    public long countExistingPartitions() throws InterruptedException, ExecutionException, TimeoutException {
+    public int getMaxPartitions() {
+        return maxPartitions;
+    }
+
+    private int setMaxPartitions(Map<String, ?> configs) {
+        try {
+            return new AbstractConfig(configDef, configs).getInt(MAX_PARTITIONS);
+        } catch (ConfigException | NullPointerException | NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    private void startPeriodicCounter() {
+        if (scheduledPartitionCounter == null) {
+            scheduledPartitionCounter = scheduler.scheduleWithFixedDelay(() -> {
+                try {
+                    int existingPartitions = countExistingPartitions();
+                    existingPartitionCount.set(existingPartitions);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (ExecutionException | TimeoutException e) {
+                    e.printStackTrace();
+                }
+            }, 0, SCHEDULE_PERIOD_MILLIS, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    private int countExistingPartitions() throws InterruptedException, ExecutionException, TimeoutException {
         List<String> topicNames = admin.listTopics()
                 .listings()
                 .get(10, TimeUnit.SECONDS)
@@ -86,18 +118,7 @@ public class PartitionCounter implements Closeable {
                 .get(10, TimeUnit.SECONDS)
                 .values()
                 .stream()
-                .map(description -> (long) description.partitions().size())
-                .reduce(0L, Long::sum);
+                .map(description -> description.partitions().size())
+                .reduce(0, Integer::sum);
     }
-
-    public static int getMaxPartitions(Map<String, ?> configs) {
-        int maxPartitions = -1;
-        try {
-            maxPartitions = new AbstractConfig(configDef, configs).getInt(MAX_PARTITONS);
-        } catch (ConfigException | NullPointerException | NumberFormatException e) {
-            maxPartitions = -1;
-        }
-        return maxPartitions;
-    }
-
 }

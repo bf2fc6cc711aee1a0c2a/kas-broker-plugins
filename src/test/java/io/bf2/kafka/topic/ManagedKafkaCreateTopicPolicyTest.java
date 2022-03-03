@@ -1,7 +1,11 @@
 package io.bf2.kafka.topic;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.Assert.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import io.bf2.kafka.common.LocalAdminClient;
+import io.bf2.kafka.common.PartitionCounter;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy.RequestMetadata;
 import org.junit.jupiter.api.AfterEach;
@@ -14,16 +18,17 @@ import java.util.Map;
 
 class ManagedKafkaCreateTopicPolicyTest {
     ManagedKafkaCreateTopicPolicy policy;
+    Map<String, Object> configs = Map.of(
+            ManagedKafkaCreateTopicPolicy.DEFAULT_REPLICATION_FACTOR, 3,
+            ManagedKafkaCreateTopicPolicy.MIN_INSYNC_REPLICAS, 2,
+            PartitionCounter.MAX_PARTITIONS, 1000,
+            LocalAdminClient.LISTENER_NAME, "controlplane",
+            LocalAdminClient.LISTENER_PORT, "9090",
+            LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT");
 
     @BeforeEach
     void setup() {
         policy = new ManagedKafkaCreateTopicPolicy();
-        final Map<String, Object> configs = Map.of(
-                ManagedKafkaCreateTopicPolicy.DEFAULT_REPLICATION_FACTOR, 3,
-                ManagedKafkaCreateTopicPolicy.MIN_INSYNC_REPLICAS, 2,
-                "strimzi.authorization.custom-authorizer.adminclient-listener.name", "controlplane",
-                "strimzi.authorization.custom-authorizer.adminclient-listener.port", "9090",
-                "strimzi.authorization.custom-authorizer.adminclient-listener.protocol", "PLAINTEXT");
         policy.configure(configs);
     }
 
@@ -35,7 +40,7 @@ class ManagedKafkaCreateTopicPolicyTest {
     @Test
     void testValidateDefaults() {
         RequestMetadata r = buildRequest();
-        policy.validate(r);
+        assertDoesNotThrow(() -> policy.validate(r));
     }
 
     @Test
@@ -63,7 +68,59 @@ class ManagedKafkaCreateTopicPolicyTest {
     void testIsrSameAsDefault() {
         RequestMetadata r = buildRequest();
         Mockito.when(r.configs()).thenReturn(Map.of(ManagedKafkaCreateTopicPolicy.MIN_INSYNC_REPLICAS, "2"));
-        policy.validate(r);
+        assertDoesNotThrow(() -> policy.validate(r));
+    }
+
+    @Test
+    void testCanCreateTopicWithReasonablePartitions() throws Exception {
+        PartitionCounter partitionCounter = generateMockPartitionCounter(0);
+        try (ManagedKafkaCreateTopicPolicy policy = new ManagedKafkaCreateTopicPolicy(partitionCounter)) {
+            policy.configure(configs);
+            RequestMetadata ctpRequestMetadata = new RequestMetadata("test1", 100, (short) 3, null, Map.of());
+            assertDoesNotThrow(() -> policy.validate(ctpRequestMetadata));
+        }
+    }
+
+    @Test
+    void testCantCreateTopicWithTooManyPartitions() throws Exception {
+        PartitionCounter partitionCounter = generateMockPartitionCounter(0);
+        try (ManagedKafkaCreateTopicPolicy policy = new ManagedKafkaCreateTopicPolicy(partitionCounter)) {
+            policy.configure(configs);
+            RequestMetadata ctpRequestMetadata = new RequestMetadata("test1", 1001, (short) 3, null, Map.of());
+            assertThrows(PolicyViolationException.class, () -> policy.validate(ctpRequestMetadata));
+        }
+    }
+
+    @Test
+    void testCantCreateSecondTopicIfItViolates() throws Exception {
+
+        PartitionCounter partitionCounter = generateMockPartitionCounter(998);
+        try (ManagedKafkaCreateTopicPolicy policy = new ManagedKafkaCreateTopicPolicy(partitionCounter)) {
+            policy.configure(configs);
+            assertEquals(998, partitionCounter.getExistingPartitionCount());
+
+            RequestMetadata ctpRequestMetadata = new RequestMetadata("test2", 3, (short) 3, null, Map.of());
+            assertThrows(PolicyViolationException.class, () -> policy.validate(ctpRequestMetadata));
+        }
+    }
+
+    @Test
+    void testCantCreateSecondTopicIfLimitReached() throws Exception {
+        PartitionCounter partitionCounter = generateMockPartitionCounter(1001);
+        try (ManagedKafkaCreateTopicPolicy policy = new ManagedKafkaCreateTopicPolicy(partitionCounter)) {
+            policy.configure(configs);
+            assertEquals(1001, partitionCounter.getExistingPartitionCount());
+
+            RequestMetadata ctpRequestMetadata = new RequestMetadata("test2", 3, (short) 3, null, Map.of());
+            assertThrows(PolicyViolationException.class, () -> policy.validate(ctpRequestMetadata));
+        }
+    }
+
+    private PartitionCounter generateMockPartitionCounter(int numPartitions) {
+        PartitionCounter partitionCounter = Mockito.mock(PartitionCounter.class);
+        Mockito.when(partitionCounter.getMaxPartitions()).thenReturn(1000);
+        Mockito.when(partitionCounter.getExistingPartitionCount()).thenReturn(numPartitions);
+        return partitionCounter;
     }
 
     private RequestMetadata buildRequest() {
