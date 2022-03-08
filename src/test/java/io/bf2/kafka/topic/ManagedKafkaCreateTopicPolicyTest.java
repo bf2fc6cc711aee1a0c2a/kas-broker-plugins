@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.util.List;
 import java.util.Map;
 
 
@@ -112,6 +113,19 @@ class ManagedKafkaCreateTopicPolicyTest {
             assertEquals(1001, partitionCounter.getExistingPartitionCount());
 
             RequestMetadata ctpRequestMetadata = new RequestMetadata("test2", 3, (short) 3, null, Map.of());
+            assertThrows(PolicyViolationException.class, () -> policy.validate(ctpRequestMetadata));
+        }
+    }
+
+    @Test
+    void testUsingReplicaAssignments() throws Exception {
+        PartitionCounter partitionCounter = generateMockPartitionCounter(999);
+        try (ManagedKafkaCreateTopicPolicy policy = new ManagedKafkaCreateTopicPolicy(partitionCounter)) {
+            policy.configure(configs);
+            assertEquals(999, partitionCounter.getExistingPartitionCount());
+
+            RequestMetadata ctpRequestMetadata =
+                    new RequestMetadata("test2", null, (short) 3, Map.of(0, List.of(0), 1, List.of(0)), Map.of());
             assertThrows(PolicyViolationException.class, () -> policy.validate(ctpRequestMetadata));
         }
     }

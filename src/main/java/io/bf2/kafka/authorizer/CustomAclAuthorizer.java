@@ -142,8 +142,7 @@ public class CustomAclAuthorizer implements Authorizer {
     final kafka.security.authorizer.AclAuthorizer delegate;
     final AuditLoggingController loggingController;
 
-    private volatile int maxPartitions;
-    PartitionCounter partitionCounter;
+    private volatile PartitionCounter partitionCounter;
 
     public CustomAclAuthorizer(kafka.security.authorizer.AclAuthorizer delegate) {
         this.delegate = delegate;
@@ -167,8 +166,6 @@ public class CustomAclAuthorizer implements Authorizer {
         addAllowedListeners(configs);
 
         partitionCounter = PartitionCounter.create(configs);
-
-        maxPartitions = partitionCounter.getMaxPartitions();
 
         if (configs.containsKey(RESOURCE_OPERATIONS_KEY)) {
             ObjectMapper mapper = new ObjectMapper();
@@ -295,8 +292,8 @@ public class CustomAclAuthorizer implements Authorizer {
     }
 
     private AuthorizationResult authorizeAction(AuthorizableRequestContext requestContext, Action action) {
-        if ((requestContext.requestType() == CREATE_PARTITIONS_APIKEY && maxPartitions > 0)
-                && (partitionCounter.getExistingPartitionCount() >= maxPartitions)) {
+        if ((requestContext.requestType() == CREATE_PARTITIONS_APIKEY && partitionCounter.getMaxPartitions() > 0)
+                && (partitionCounter.getExistingPartitionCount() >= partitionCounter.getMaxPartitions())) {
             loggingController.logAtLevel(requestContext, action, "reached partition limit ", false);
             return AuthorizationResult.DENIED;
         }
