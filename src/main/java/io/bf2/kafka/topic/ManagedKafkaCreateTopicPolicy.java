@@ -9,6 +9,8 @@ import org.apache.kafka.server.policy.CreateTopicPolicy;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 
 public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
     protected static final String DEFAULT_REPLICATION_FACTOR = "default.replication.factor";
@@ -79,22 +81,36 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
             return;
         }
 
-        final int existingPartitionCount = partitionCounter.getExistingPartitionCount();
+        partitionCounter.getExistingPartitionCount();
 
         Integer addPartitions = Optional.ofNullable(requestMetadata.replicasAssignments())
                 .map(Map::size)
                 .orElseGet(() -> requestMetadata.numPartitions() != null ? requestMetadata.numPartitions() : 0);
 
         if (addPartitions > maxPartitions) {
-            throw new PolicyViolationException(
-                    policyViolationExceptionMessage(requestMetadata.topic(), addPartitions, maxPartitions, existingPartitionCount));
+            throw new PolicyViolationException(policyViolationExceptionMessage(requestMetadata.topic(), addPartitions,
+                    maxPartitions, partitionCounter.getRemainingPartitionBudget()));
         }
 
-        if (existingPartitionCount + addPartitions > maxPartitions) {
-            throw new PolicyViolationException(
-                    policyViolationExceptionMessage(requestMetadata.topic(), addPartitions, maxPartitions, existingPartitionCount));
+        switch (partitionCounter.reservePartitions(addPartitions)) {
+        case REJECTED:
+            throw new PolicyViolationException(policyViolationExceptionMessage(requestMetadata.topic(), addPartitions,
+                    maxPartitions, partitionCounter.getRemainingPartitionBudget()));
+        case FAILED:
+            try {
+                int recheckedPartitionCount = partitionCounter.countExistingPartitions();
+                if (addPartitions + recheckedPartitionCount > maxPartitions) {
+                    throw new PolicyViolationException(policyViolationExceptionMessage(requestMetadata.topic(),
+                            addPartitions, maxPartitions, maxPartitions - recheckedPartitionCount));
+                }
+            } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                throw new PolicyViolationException(policyViolationExceptionMessage(requestMetadata.topic(),
+                        addPartitions, maxPartitions, partitionCounter.getRemainingPartitionBudget()));
+            }
+            break;
+        default:
+            break;
         }
-
     }
 
     private Optional<Short> defaultIsr() {
@@ -111,9 +127,9 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
         return Optional.ofNullable(configs.get(name));
     }
 
-    private String policyViolationExceptionMessage(String topic, int partitions, int maxPartitions, int existingPartitionCount) {
+    private String policyViolationExceptionMessage(String topic, int partitions, int maxPartitions, int remainingBudget) {
         return String.format(
-                "Topic %s with %d partitions would exceed the cluster partition limit of %d (current count is %d",
-                topic, partitions, maxPartitions, existingPartitionCount);
+                "Topic %s with %d partitions would exceed the cluster partition limit of %d (current count is %d)",
+                topic, partitions, maxPartitions, maxPartitions - remainingBudget);
     }
 }

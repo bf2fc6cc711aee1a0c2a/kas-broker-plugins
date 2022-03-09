@@ -53,6 +53,7 @@ public class PartitionCounter implements AutoCloseable {
     private final Admin admin;
 
     private AtomicInteger existingPartitionCount;
+    private AtomicInteger remainingPartitionBudget;
 
     private AtomicInteger handles;
 
@@ -74,6 +75,7 @@ public class PartitionCounter implements AutoCloseable {
         this.config = new AbstractConfig(configDef, config);
         this.admin = LocalAdminClient.create(config);
         existingPartitionCount = new AtomicInteger(0);
+        remainingPartitionBudget = new AtomicInteger(0);
         handles = new AtomicInteger(0);
         ThreadFactory threadFactory =
                 new ThreadFactoryBuilder().setNameFormat("partition-counter").setDaemon(true).build();
@@ -94,11 +96,31 @@ public class PartitionCounter implements AutoCloseable {
         }
     }
 
-    /**
-     * @return the existingPartitionCount
-     */
     public int getExistingPartitionCount() {
         return existingPartitionCount.get();
+    }
+
+    public int getRemainingPartitionBudget() {
+        return remainingPartitionBudget.get();
+    }
+
+    public enum ReservationResponse {
+        SUCCEEDED, FAILED, REJECTED
+    }
+
+    public ReservationResponse reservePartitions(int numPartitions) {
+        int attempts = 0;
+        while (attempts++ < 3) {
+            int budget = partitionCounter.getRemainingPartitionBudget();
+            int proposedNewBudget = budget - numPartitions;
+            if (proposedNewBudget < 0) {
+                return ReservationResponse.REJECTED;
+            }
+            if (remainingPartitionBudget.compareAndSet(budget, proposedNewBudget)) {
+                return ReservationResponse.SUCCEEDED;
+            }
+        }
+        return ReservationResponse.FAILED;
     }
 
     public int getMaxPartitions() {
@@ -119,6 +141,7 @@ public class PartitionCounter implements AutoCloseable {
                 try {
                     int existingPartitions = countExistingPartitions();
                     existingPartitionCount.set(existingPartitions);
+                    remainingPartitionBudget.set(maxPartitions - existingPartitions);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 } catch (ExecutionException | TimeoutException e) {
@@ -128,7 +151,7 @@ public class PartitionCounter implements AutoCloseable {
         }
     }
 
-    private int countExistingPartitions() throws InterruptedException, ExecutionException, TimeoutException {
+    public int countExistingPartitions() throws InterruptedException, ExecutionException, TimeoutException {
         int timeout = config.getInt(TIMEOUT_SECONDS);
         List<String> topicNames = admin.listTopics()
                 .listings()
