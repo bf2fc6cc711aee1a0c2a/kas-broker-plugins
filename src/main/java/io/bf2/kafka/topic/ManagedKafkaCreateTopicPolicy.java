@@ -93,23 +93,23 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
         }
 
         switch (partitionCounter.reservePartitions(addPartitions)) {
-        case REJECTED:
-            throw new PolicyViolationException(policyViolationExceptionMessage(requestMetadata.topic(), addPartitions,
-                    maxPartitions, partitionCounter.getRemainingPartitionBudget()));
-        case FAILED:
-            try {
-                int recheckedPartitionCount = partitionCounter.countExistingPartitions();
-                if (addPartitions + recheckedPartitionCount > maxPartitions) {
-                    throw new PolicyViolationException(policyViolationExceptionMessage(requestMetadata.topic(),
-                            addPartitions, maxPartitions, maxPartitions - recheckedPartitionCount));
-                }
-            } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            case REJECTED:
                 throw new PolicyViolationException(policyViolationExceptionMessage(requestMetadata.topic(),
                         addPartitions, maxPartitions, partitionCounter.getRemainingPartitionBudget()));
-            }
-            break;
-        default:
-            break;
+            case FAILED:
+                try {
+                    int recheckedPartitionCount = partitionCounter.countExistingPartitions();
+                    if (addPartitions + recheckedPartitionCount > maxPartitions) {
+                        throw new PolicyViolationException(policyViolationExceptionMessage(requestMetadata.topic(),
+                                addPartitions, maxPartitions, maxPartitions - recheckedPartitionCount));
+                    }
+                } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                    throw new PolicyViolationException(policyViolationExceptionMessage(requestMetadata.topic(),
+                            addPartitions, maxPartitions, partitionCounter.getRemainingPartitionBudget()), e);
+                }
+                break;
+            default:
+                break;
         }
     }
 

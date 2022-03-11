@@ -29,14 +29,18 @@ import java.util.stream.Collectors;
 public class PartitionCounter implements AutoCloseable {
 
     public static final String MAX_PARTITIONS = "max.partitions";
+    public static final String TIMEOUT_SECONDS =
+            "strimzi.authorization.custom-authorizer.partition-counter.timeout-seconds";
     public static final String PRIVATE_TOPIC_PREFIX = "strimzi.authorization.custom-authorizer.partition-counter.private-topic-prefix";
-    public static final String TIMEOUT_SECONDS = "strimzi.authorization.custom-authorizer.partition-counter.timeout-seconds";
     public static final String SCHEDULE_INTERVAL_SECONDS = "strimzi.authorization.custom-authorizer.partition-counter.schedule-interval-seconds";
 
     static final int DEFAULT_MAX_PARTITIONS = -1;
-    static final String DEFAULT_PRIVATE_TOPIC_PREFIX = "__redhat_";
     static final int DEFAULT_TIMEOUT_SECONDS = 10;
     static final int DEFAULT_SCHEDULE_INTERVAL_SECONDS = 15;
+    static final String DEFAULT_PRIVATE_TOPIC_PREFIX = "__redhat_";
+
+    private static final String GROUP_METADATA_TOPIC_NAME = "__consumer_offsets";
+    private static final String TRANSACTION_STATE_TOPIC_NAME = "__transaction_state";
 
     private static final ConfigDef configDef = new ConfigDef()
             .define(MAX_PARTITIONS, ConfigDef.Type.INT, DEFAULT_MAX_PARTITIONS, ConfigDef.Importance.MEDIUM, "Max partitions")
@@ -51,16 +55,16 @@ public class PartitionCounter implements AutoCloseable {
     private final int maxPartitions;
 
     private final Admin admin;
-
+    private AtomicInteger handles;
     private AtomicInteger existingPartitionCount;
     private AtomicInteger remainingPartitionBudget;
-
-    private AtomicInteger handles;
 
     private final ScheduledExecutorService scheduler;
     private ScheduledFuture<?> scheduledPartitionCounter;
 
-    final AbstractConfig config;
+    private final Integer requestTimeout;
+    private final String privateTopicPrefix;
+    private final Integer scheduleIntervalSeconds;
 
     public static synchronized PartitionCounter create(Map<String, ?> config) {
         if (partitionCounter == null) {
@@ -72,15 +76,21 @@ public class PartitionCounter implements AutoCloseable {
     }
 
     PartitionCounter(Map<String, ?> config) {
-        this.config = new AbstractConfig(configDef, config);
-        this.admin = LocalAdminClient.create(config);
+        AbstractConfig parsedConfig = new AbstractConfig(configDef, config);
+
+        handles = new AtomicInteger(0);
+        admin = LocalAdminClient.create(config);
         existingPartitionCount = new AtomicInteger(0);
         remainingPartitionBudget = new AtomicInteger(0);
-        handles = new AtomicInteger(0);
+
+        requestTimeout = parsedConfig.getInt(TIMEOUT_SECONDS);
+        maxPartitions = getMaxPartitionsFromConfig(parsedConfig);
+        privateTopicPrefix = parsedConfig.getString(PRIVATE_TOPIC_PREFIX);
+        scheduleIntervalSeconds = parsedConfig.getInt(SCHEDULE_INTERVAL_SECONDS);
+
         ThreadFactory threadFactory =
                 new ThreadFactoryBuilder().setNameFormat("partition-counter").setDaemon(true).build();
         scheduler = Executors.newScheduledThreadPool(1, threadFactory);
-        maxPartitions = setMaxPartitions();
     }
 
     @Override
@@ -120,6 +130,9 @@ public class PartitionCounter implements AutoCloseable {
                 return ReservationResponse.SUCCEEDED;
             }
         }
+
+        log.warn("Failed to safely reserve requested partitions in cache."
+                + " There may be too many CreateTopic requests in flight.");
         return ReservationResponse.FAILED;
     }
 
@@ -127,10 +140,12 @@ public class PartitionCounter implements AutoCloseable {
         return maxPartitions;
     }
 
-    private int setMaxPartitions() {
+    private static int getMaxPartitionsFromConfig(AbstractConfig config2) {
         try {
-            return config.getInt(MAX_PARTITIONS);
+            return config2.getInt(MAX_PARTITIONS);
         } catch (ConfigException | NullPointerException | NumberFormatException e) {
+            log.warn("An invalid or abset value was provided for " + MAX_PARTITIONS + "in the broker configs."
+                    + " A value of -1 will be used to indicate that no max will be enforced.");
             return -1;
         }
     }
@@ -147,24 +162,23 @@ public class PartitionCounter implements AutoCloseable {
                 } catch (ExecutionException | TimeoutException e) {
                     log.error("Exception occurred when counting partitions", e);
                 }
-            }, 0, config.getInt(SCHEDULE_INTERVAL_SECONDS), TimeUnit.SECONDS);
+            }, 0, scheduleIntervalSeconds, TimeUnit.SECONDS);
         }
     }
 
     public int countExistingPartitions() throws InterruptedException, ExecutionException, TimeoutException {
-        int timeout = config.getInt(TIMEOUT_SECONDS);
         List<String> topicNames = admin.listTopics()
                 .listings()
-                .get(timeout, TimeUnit.SECONDS)
+                .get(requestTimeout, TimeUnit.SECONDS)
                 .stream()
                 .map(TopicListing::name)
-                .filter(name -> !name.startsWith(config.getString(PRIVATE_TOPIC_PREFIX))
-                        && !"__consumer_offsets".equals(name) && !"__transaction_state".equals(name))
+                .filter(name -> !name.startsWith(privateTopicPrefix)
+                        && !GROUP_METADATA_TOPIC_NAME.equals(name) && !TRANSACTION_STATE_TOPIC_NAME.equals(name))
                 .collect(Collectors.toList());
 
         return admin.describeTopics(topicNames)
                 .all()
-                .get(timeout, TimeUnit.SECONDS)
+                .get(requestTimeout, TimeUnit.SECONDS)
                 .values()
                 .stream()
                 .map(description -> description.partitions().size())
