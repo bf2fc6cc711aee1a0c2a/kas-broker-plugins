@@ -292,8 +292,9 @@ public class CustomAclAuthorizer implements Authorizer {
     }
 
     private AuthorizationResult authorizeAction(AuthorizableRequestContext requestContext, Action action) {
-        if ((requestContext.requestType() == CREATE_PARTITIONS_APIKEY && partitionCounter.getMaxPartitions() > 0)
-                && (partitionCounter.getRemainingPartitionBudget() <= 0)) {
+        if (requestContext.requestType() == CREATE_PARTITIONS_APIKEY
+                && partitionCounter.getMaxPartitions() > 0
+                && partitionCounter.getRemainingPartitionBudget() <= 0) {
             loggingController.logAtLevel(requestContext, action, "reached partition limit ", false);
             return AuthorizationResult.DENIED;
         }

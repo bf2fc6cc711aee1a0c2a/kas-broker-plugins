@@ -92,24 +92,17 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
                     maxPartitions, partitionCounter.getRemainingPartitionBudget()));
         }
 
-        switch (partitionCounter.reservePartitions(addPartitions)) {
-            case REJECTED:
-                throw new PolicyViolationException(policyViolationExceptionMessage(requestMetadata.topic(),
-                        addPartitions, maxPartitions, partitionCounter.getRemainingPartitionBudget()));
-            case FAILED:
-                try {
-                    int recheckedPartitionCount = partitionCounter.countExistingPartitions();
-                    if (addPartitions + recheckedPartitionCount > maxPartitions) {
-                        throw new PolicyViolationException(policyViolationExceptionMessage(requestMetadata.topic(),
-                                addPartitions, maxPartitions, maxPartitions - recheckedPartitionCount));
-                    }
-                } catch (InterruptedException | ExecutionException | TimeoutException e) {
+        if (!partitionCounter.reservePartitions(addPartitions)) {
+            try {
+                int recheckedPartitionCount = partitionCounter.countExistingPartitions();
+                if (addPartitions + recheckedPartitionCount > maxPartitions) {
                     throw new PolicyViolationException(policyViolationExceptionMessage(requestMetadata.topic(),
-                            addPartitions, maxPartitions, partitionCounter.getRemainingPartitionBudget()), e);
+                            addPartitions, maxPartitions, maxPartitions - recheckedPartitionCount));
                 }
-                break;
-            default:
-                break;
+            } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                throw new PolicyViolationException(policyViolationExceptionMessage(requestMetadata.topic(),
+                        addPartitions, maxPartitions, partitionCounter.getRemainingPartitionBudget()), e);
+            }
         }
     }
 

@@ -2,7 +2,6 @@ package io.bf2.kafka.topic;
 
 import io.bf2.kafka.common.LocalAdminClient;
 import io.bf2.kafka.common.PartitionCounter;
-import io.bf2.kafka.common.PartitionCounter.ReservationResponse;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy.RequestMetadata;
 import org.junit.jupiter.api.AfterEach;
@@ -12,6 +11,8 @@ import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 
 import static org.junit.Assert.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -75,7 +76,7 @@ class ManagedKafkaCreateTopicPolicyTest {
 
     @Test
     void testCanCreateTopicWithReasonablePartitions() throws Exception {
-        PartitionCounter partitionCounter = generateMockPartitionCounter(0, ReservationResponse.SUCCEEDED);
+        PartitionCounter partitionCounter = generateMockPartitionCounter(0, true);
         try (ManagedKafkaCreateTopicPolicy policy = new ManagedKafkaCreateTopicPolicy(partitionCounter)) {
             policy.configure(configs);
             RequestMetadata ctpRequestMetadata = new RequestMetadata("test1", 100, (short) 3, null, Map.of());
@@ -85,7 +86,7 @@ class ManagedKafkaCreateTopicPolicyTest {
 
     @Test
     void testCantCreateTopicWithTooManyPartitions() throws Exception {
-        PartitionCounter partitionCounter = generateMockPartitionCounter(0, ReservationResponse.REJECTED);
+        PartitionCounter partitionCounter = generateMockPartitionCounter(0, false);
         try (ManagedKafkaCreateTopicPolicy policy = new ManagedKafkaCreateTopicPolicy(partitionCounter)) {
             policy.configure(configs);
             RequestMetadata ctpRequestMetadata = new RequestMetadata("test1", 1001, (short) 3, null, Map.of());
@@ -95,8 +96,7 @@ class ManagedKafkaCreateTopicPolicyTest {
 
     @Test
     void testCantCreateSecondTopicIfItViolates() throws Exception {
-
-        PartitionCounter partitionCounter = generateMockPartitionCounter(998, ReservationResponse.REJECTED);
+        PartitionCounter partitionCounter = generateMockPartitionCounter(998, false);
         try (ManagedKafkaCreateTopicPolicy policy = new ManagedKafkaCreateTopicPolicy(partitionCounter)) {
             policy.configure(configs);
             assertEquals(998, partitionCounter.getExistingPartitionCount());
@@ -108,7 +108,7 @@ class ManagedKafkaCreateTopicPolicyTest {
 
     @Test
     void testCantCreateSecondTopicIfLimitReached() throws Exception {
-        PartitionCounter partitionCounter = generateMockPartitionCounter(1001, ReservationResponse.REJECTED);
+        PartitionCounter partitionCounter = generateMockPartitionCounter(1001, false);
         try (ManagedKafkaCreateTopicPolicy policy = new ManagedKafkaCreateTopicPolicy(partitionCounter)) {
             policy.configure(configs);
             assertEquals(1001, partitionCounter.getExistingPartitionCount());
@@ -120,7 +120,7 @@ class ManagedKafkaCreateTopicPolicyTest {
 
     @Test
     void testUsingReplicaAssignments() throws Exception {
-        PartitionCounter partitionCounter = generateMockPartitionCounter(999, ReservationResponse.REJECTED);
+        PartitionCounter partitionCounter = generateMockPartitionCounter(999, false);
         try (ManagedKafkaCreateTopicPolicy policy = new ManagedKafkaCreateTopicPolicy(partitionCounter)) {
             policy.configure(configs);
             assertEquals(999, partitionCounter.getExistingPartitionCount());
@@ -131,11 +131,13 @@ class ManagedKafkaCreateTopicPolicyTest {
         }
     }
 
-    private PartitionCounter generateMockPartitionCounter(int numPartitions, ReservationResponse reservationResponse) {
+    private PartitionCounter generateMockPartitionCounter(int numPartitions, boolean response)
+            throws InterruptedException, ExecutionException, TimeoutException {
         PartitionCounter partitionCounter = Mockito.mock(PartitionCounter.class);
         Mockito.when(partitionCounter.getMaxPartitions()).thenReturn(1000);
         Mockito.when(partitionCounter.getExistingPartitionCount()).thenReturn(numPartitions);
-        Mockito.when(partitionCounter.reservePartitions(Mockito.anyInt())).thenReturn(reservationResponse);
+        Mockito.when(partitionCounter.countExistingPartitions()).thenReturn(numPartitions);
+        Mockito.when(partitionCounter.reservePartitions(Mockito.anyInt())).thenReturn(response);
 
         return partitionCounter;
     }
