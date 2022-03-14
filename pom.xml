@@ -60,6 +60,7 @@
         <zookeeper.version>3.6.3</zookeeper.version>
         <kafka-junit.version>4.2.0</kafka-junit.version>
         <curator-test.version>5.2.0</curator-test.version>
+        <awaitility.version>4.2.0</awaitility.version>
     </properties>
 
     <dependencies>
@@ -149,10 +150,10 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-        	<groupId>org.awaitility</groupId>
-        	<artifactId>awaitility</artifactId>
-        	<version>4.2.0</version>
-        	<scope>test</scope>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>${awaitility.version}</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

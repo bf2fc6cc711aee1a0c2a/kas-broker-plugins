@@ -18,8 +18,7 @@ import java.util.stream.Stream;
 public class LocalAdminClient {
     public static final String LISTENER_NAME = "strimzi.authorization.custom-authorizer.adminclient-listener.name";
     public static final String LISTENER_PORT = "strimzi.authorization.custom-authorizer.adminclient-listener.port";
-    public static final String LISTENER_PROTOCOL =
-            "strimzi.authorization.custom-authorizer.adminclient-listener.protocol";
+    public static final String LISTENER_PROTOCOL = "strimzi.authorization.custom-authorizer.adminclient-listener.protocol";
 
     public static Admin create(Map<String, ?> configs) {
 

@@ -29,8 +29,7 @@ import java.util.stream.Collectors;
 public class PartitionCounter implements AutoCloseable {
 
     public static final String MAX_PARTITIONS = "max.partitions";
-    public static final String TIMEOUT_SECONDS =
-            "strimzi.authorization.custom-authorizer.partition-counter.timeout-seconds";
+    public static final String TIMEOUT_SECONDS = "strimzi.authorization.custom-authorizer.partition-counter.timeout-seconds";
     public static final String PRIVATE_TOPIC_PREFIX = "strimzi.authorization.custom-authorizer.partition-counter.private-topic-prefix";
     public static final String SCHEDULE_INTERVAL_SECONDS = "strimzi.authorization.custom-authorizer.partition-counter.schedule-interval-seconds";
 
@@ -50,14 +49,14 @@ public class PartitionCounter implements AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(AclLoggingConfig.class);
 
-    private static PartitionCounter partitionCounter;
+    private static volatile PartitionCounter partitionCounter;
 
     private final int maxPartitions;
 
     private final Admin admin;
-    private AtomicInteger handles;
-    private AtomicInteger existingPartitionCount;
-    private AtomicInteger remainingPartitionBudget;
+    private final AtomicInteger handles;
+    private final AtomicInteger existingPartitionCount;
+    private final AtomicInteger remainingPartitionBudget;
 
     private final ScheduledExecutorService scheduler;
     private ScheduledFuture<?> scheduledPartitionCounter;
@@ -69,8 +68,8 @@ public class PartitionCounter implements AutoCloseable {
     public static synchronized PartitionCounter create(Map<String, ?> config) {
         if (partitionCounter == null) {
             partitionCounter = new PartitionCounter(config);
+            partitionCounter.start();
         }
-        partitionCounter.start();
         partitionCounter.handles.incrementAndGet();
         return partitionCounter;
     }
@@ -140,11 +139,11 @@ public class PartitionCounter implements AutoCloseable {
         return maxPartitions;
     }
 
-    private static int getMaxPartitionsFromConfig(AbstractConfig config2) {
+    private static int getMaxPartitionsFromConfig(AbstractConfig config) {
         try {
-            return config2.getInt(MAX_PARTITIONS);
+            return config.getInt(MAX_PARTITIONS);
         } catch (ConfigException | NullPointerException | NumberFormatException e) {
-            log.warn("An invalid or abset value was provided for " + MAX_PARTITIONS + "in the broker configs."
+            log.warn("An invalid or absent value was provided for " + MAX_PARTITIONS + "in the broker configs."
                     + " A value of -1 will be used to indicate that no max will be enforced.");
             return -1;
         }
