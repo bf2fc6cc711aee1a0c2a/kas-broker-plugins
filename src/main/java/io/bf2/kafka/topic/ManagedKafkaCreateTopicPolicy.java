@@ -6,6 +6,8 @@ package io.bf2.kafka.topic;
 import io.bf2.kafka.common.PartitionCounter;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.Optional;
@@ -15,6 +17,9 @@ import java.util.concurrent.TimeoutException;
 public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
     protected static final String DEFAULT_REPLICATION_FACTOR = "default.replication.factor";
     protected static final String MIN_INSYNC_REPLICAS = "min.insync.replicas";
+
+    private static final Logger log = LoggerFactory.getLogger(ManagedKafkaCreateTopicPolicy.class);
+
     private volatile Map<String, ?> configs;
     private volatile PartitionCounter partitionCounter;
 
@@ -100,6 +105,7 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
                             addPartitions, maxPartitions, maxPartitions - recheckedPartitionCount));
                 }
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                log.error("Exception occurred while performing synchronous partition recount", e);
                 throw new PolicyViolationException(policyViolationExceptionMessage(requestMetadata.topic(),
                         addPartitions, maxPartitions, partitionCounter.getRemainingPartitionBudget()), e);
             }
