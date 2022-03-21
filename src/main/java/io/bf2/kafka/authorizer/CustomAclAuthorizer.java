@@ -6,6 +6,7 @@ package io.bf2.kafka.authorizer;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.bf2.kafka.common.PartitionCounter;
 import org.apache.kafka.common.Endpoint;
 import org.apache.kafka.common.acl.AccessControlEntryFilter;
 import org.apache.kafka.common.acl.AclBinding;
@@ -98,6 +99,7 @@ import java.util.stream.IntStream;
  */
 public class CustomAclAuthorizer implements Authorizer {
 
+    private static final int CREATE_PARTITIONS_APIKEY = 37;
     private static final Logger log = LoggerFactory.getLogger(CustomAclAuthorizer.class);
 
     static final String CREATE_ACL_INVALID_PRINCIPAL = "Invalid ACL principal name";
@@ -140,6 +142,8 @@ public class CustomAclAuthorizer implements Authorizer {
     final kafka.security.authorizer.AclAuthorizer delegate;
     final AuditLoggingController loggingController;
 
+    private volatile PartitionCounter partitionCounter;
+
     public CustomAclAuthorizer(kafka.security.authorizer.AclAuthorizer delegate) {
         this.delegate = delegate;
         this.loggingController = new AuditLoggingController();
@@ -160,6 +164,8 @@ public class CustomAclAuthorizer implements Authorizer {
         loggingController.configure(configs);
 
         addAllowedListeners(configs);
+
+        partitionCounter = PartitionCounter.create(configs);
 
         if (configs.containsKey(RESOURCE_OPERATIONS_KEY)) {
             ObjectMapper mapper = new ObjectMapper();
@@ -286,6 +292,13 @@ public class CustomAclAuthorizer implements Authorizer {
     }
 
     private AuthorizationResult authorizeAction(AuthorizableRequestContext requestContext, Action action) {
+        if (requestContext.requestType() == CREATE_PARTITIONS_APIKEY
+                && partitionCounter.getMaxPartitions() > 0
+                && partitionCounter.getRemainingPartitionBudget() <= 0) {
+            loggingController.logAtLevel(requestContext, action, "reached partition limit ", false);
+            return AuthorizationResult.DENIED;
+        }
+
         // is super user allow any operation
         if (delegate.isSuperUser(requestContext.principal())) {
             loggingController.logAtLevel(requestContext, action, "super.user ", true);
@@ -454,7 +467,17 @@ public class CustomAclAuthorizer implements Authorizer {
 
     @Override
     public void close() throws IOException {
-        delegate.close();
-        loggingController.close();
+        if (delegate != null) {
+            delegate.close();
+        }
+
+        if (loggingController != null) {
+            loggingController.close();
+        }
+
+        if (partitionCounter != null) {
+            partitionCounter.close();
+        }
+
     }
 }
