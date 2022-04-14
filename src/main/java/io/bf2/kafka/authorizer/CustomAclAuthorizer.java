@@ -7,6 +7,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.bf2.kafka.common.PartitionCounter;
+import io.bf2.kafka.common.PartitionLimitEnforcement;
 import org.apache.kafka.common.Endpoint;
 import org.apache.kafka.common.acl.AccessControlEntryFilter;
 import org.apache.kafka.common.acl.AclBinding;
@@ -143,10 +144,16 @@ public class CustomAclAuthorizer implements Authorizer {
     final AuditLoggingController loggingController;
 
     private volatile PartitionCounter partitionCounter;
+    private volatile boolean partitionLimitEnforcementEnabled;
+
+    CustomAclAuthorizer(kafka.security.authorizer.AclAuthorizer delegate, PartitionCounter partitionCounter) {
+        this.delegate = delegate;
+        this.partitionCounter = partitionCounter;
+        this.loggingController = new AuditLoggingController();
+    }
 
     public CustomAclAuthorizer(kafka.security.authorizer.AclAuthorizer delegate) {
-        this.delegate = delegate;
-        this.loggingController = new AuditLoggingController();
+        this(delegate, null);
     }
 
     public CustomAclAuthorizer() {
@@ -165,7 +172,11 @@ public class CustomAclAuthorizer implements Authorizer {
 
         addAllowedListeners(configs);
 
-        partitionCounter = PartitionCounter.create(configs);
+        if (partitionCounter == null) {
+            partitionCounter = PartitionCounter.create(configs);
+        }
+
+        partitionLimitEnforcementEnabled = PartitionLimitEnforcement.isEnabled(configs);
 
         if (configs.containsKey(RESOURCE_OPERATIONS_KEY)) {
             ObjectMapper mapper = new ObjectMapper();
@@ -292,7 +303,7 @@ public class CustomAclAuthorizer implements Authorizer {
     }
 
     private AuthorizationResult authorizeAction(AuthorizableRequestContext requestContext, Action action) {
-        if (requestContext.requestType() == CREATE_PARTITIONS_APIKEY
+        if (partitionLimitEnforcementEnabled && requestContext.requestType() == CREATE_PARTITIONS_APIKEY
                 && partitionCounter.getMaxPartitions() > 0
                 && partitionCounter.getRemainingPartitionBudget() <= 0) {
             loggingController.logAtLevel(requestContext, action, "reached partition limit ", false);

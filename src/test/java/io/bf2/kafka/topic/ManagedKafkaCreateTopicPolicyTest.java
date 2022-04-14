@@ -2,13 +2,17 @@ package io.bf2.kafka.topic;
 
 import io.bf2.kafka.common.LocalAdminClient;
 import io.bf2.kafka.common.PartitionCounter;
+import io.bf2.kafka.common.PartitionLimitEnforcement;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy.RequestMetadata;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mockito;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -128,6 +132,34 @@ class ManagedKafkaCreateTopicPolicyTest {
             RequestMetadata ctpRequestMetadata =
                     new RequestMetadata("test2", null, (short) 3, Map.of(0, List.of(0), 1, List.of(0)), Map.of());
             assertThrows(PolicyViolationException.class, () -> policy.validate(ctpRequestMetadata));
+        }
+    }
+
+
+    @ParameterizedTest
+    @CsvSource({
+            "null, DENIED",
+            "true, DENIED",
+            "false, ALLOWED"
+    })
+    void testPartitionLimitEnforcementFeatureFlag(String featureFlag, String expectedResult) throws Exception {
+        PartitionCounter partitionCounter = generateMockPartitionCounter(1001, false);
+        try (ManagedKafkaCreateTopicPolicy policy = new ManagedKafkaCreateTopicPolicy(partitionCounter)) {
+            Map<String, Object> customConfig = new HashMap<>(configs);
+
+            if (!"null".equalsIgnoreCase(featureFlag)) {
+                customConfig.put(PartitionLimitEnforcement.CONFIG_ENABLED, featureFlag);
+            }
+
+            policy.configure(customConfig);
+
+            RequestMetadata ctpRequestMetadata = new RequestMetadata("test2", 3, (short) 3, null, Map.of());
+
+            if ("DENIED".equals(expectedResult)) {
+                assertThrows(PolicyViolationException.class, () -> policy.validate(ctpRequestMetadata));
+            } else {
+                assertDoesNotThrow(() -> policy.validate(ctpRequestMetadata));
+            }
         }
     }
 

@@ -3,6 +3,8 @@
  */
 package io.bf2.kafka.authorizer;
 
+import io.bf2.kafka.common.PartitionCounter;
+import io.bf2.kafka.common.PartitionLimitEnforcement;
 import org.apache.kafka.common.acl.AccessControlEntry;
 import org.apache.kafka.common.acl.AclBinding;
 import org.apache.kafka.common.acl.AclBindingFilter;
@@ -31,6 +33,7 @@ import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -38,9 +41,13 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
 class CustomAclAuthorizerTest {
@@ -270,5 +277,50 @@ class CustomAclAuthorizerTest {
                             && CustomAclAuthorizer.CREATE_ACL_INVALID_BINDING.equals(e.getMessage())));
         }
     }
+
+    @ParameterizedTest
+    @CsvSource({
+            "null, DENIED",
+            "true, DENIED",
+            "false, ALLOWED"
+    })
+    void testPartitionLimitEnforcementFeatureFlag(String featureFlag, AuthorizationResult result) throws Exception {
+        KafkaPrincipal superUser = SecurityUtils.parseKafkaPrincipal("User:admin");
+        Mockito.when(this.delegate.isSuperUser(superUser)).thenReturn(Boolean.TRUE);
+        PartitionCounter partitionCounter = generateMockPartitionCounter(1001, false);
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate, partitionCounter)) {
+            Map<String, Object> customConfig = new HashMap<>(config);
+
+            if (!"null".equalsIgnoreCase(featureFlag)) {
+                customConfig.put(PartitionLimitEnforcement.CONFIG_ENABLED, featureFlag);
+            }
+
+            auth.configure(customConfig);
+
+            AuthorizableRequestContext rc = Mockito.mock(AuthorizableRequestContext.class);
+            Mockito.when(rc.clientAddress()).thenReturn(InetAddress.getLoopbackAddress());
+            Mockito.when(rc.listenerName()).thenReturn("security-9095");
+            Mockito.when(rc.principal()).thenReturn(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "admin"));
+            Mockito.when(rc.requestType()).thenReturn(37);
+
+            Action action = new Action(AclOperation.ALTER, new ResourcePattern(ResourceType.TOPIC, "foo", PatternType.LITERAL), 0, true, true);
+            List<AuthorizationResult> results = auth.authorize(rc, Arrays.asList(action));
+
+            assertEquals(1, results.size());
+            assertEquals(result, results.get(0));
+        }
+    }
+
+    private PartitionCounter generateMockPartitionCounter(int numPartitions, boolean response)
+            throws InterruptedException, ExecutionException, TimeoutException {
+        PartitionCounter partitionCounter = Mockito.mock(PartitionCounter.class);
+        Mockito.when(partitionCounter.getMaxPartitions()).thenReturn(1000);
+        Mockito.when(partitionCounter.getExistingPartitionCount()).thenReturn(numPartitions);
+        Mockito.when(partitionCounter.countExistingPartitions()).thenReturn(numPartitions);
+        Mockito.when(partitionCounter.reservePartitions(Mockito.anyInt())).thenReturn(response);
+
+        return partitionCounter;
+    }
+
 
 }
