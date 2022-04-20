@@ -66,6 +66,6 @@ step of creating a new branch and simply checkout that branch.
 #### Pull Request
 Releases are performed by modifying the `.github/project.yml` file, setting `current-version` to the release version and `next-version` to the next SNAPSHOT. Open a pull request with the changed `project.yml` to initiate the pre-release workflows. The target of the pull request should be either `main` or a release branch (described above).
 At this phase, the project milestone will be checked and it will be verified that no issues for the release milestone are still open. Additionally, the project's integration tests will be run.
-Once approved and the pull request is merged, the release action will execute. This action will execute the Maven release plugin to tag the release commit, build the application artifacts, create the build image, and push the image to the repository identified by the secret `IMAGE_REPO_HOSTNAME`. If successful, the action will push the new tag to the Github repository and generate release notes listing all of the closed issues included in the milestone. Finally, the milestone will be closed.
+Once approved and the pull request is merged, the release action will execute. This action will execute the Maven release plugin to tag the release commit, and build the application artifacts. If successful, the action will push the new tag to the GitHub repository and generate release notes listing all of the closed issues included in the milestone. Finally, the milestone will be closed.
 
 
