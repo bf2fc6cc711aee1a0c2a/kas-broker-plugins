@@ -76,15 +76,24 @@ public class PartitionCounter implements AutoCloseable {
      */
     public static final String SCHEDULE_INTERVAL_SECONDS = "strimzi.authorization.custom-authorizer.partition-counter.schedule-interval-seconds";
 
+    /**
+     * Feature flag broker property key to allow disabling of partition limit enforcement. If this
+     * property is not specified, a default of {@link #DEFAULT_LIMIT_ENFORCED} will be returned through
+     * the {@link #isLimitEnforced()} method.
+     */
+    public static final String LIMIT_ENFORCED = "strimzi.authorization.custom-authorizer.partition-limit-enforced";
+
     static final int DEFAULT_MAX_PARTITIONS = -1;
     static final int DEFAULT_TIMEOUT_SECONDS = 10;
     static final int DEFAULT_SCHEDULE_INTERVAL_SECONDS = 15;
     static final String DEFAULT_PRIVATE_TOPIC_PREFIX = "__redhat_";
+    static final boolean DEFAULT_LIMIT_ENFORCED = false;
 
     private static final String GROUP_METADATA_TOPIC_NAME = "__consumer_offsets";
     private static final String TRANSACTION_STATE_TOPIC_NAME = "__transaction_state";
 
     private static final ConfigDef configDef = new ConfigDef()
+            .define(LIMIT_ENFORCED, ConfigDef.Type.BOOLEAN, DEFAULT_LIMIT_ENFORCED, ConfigDef.Importance.MEDIUM, "Feature flag to allow enabling of partition limit enforcement")
             .define(MAX_PARTITIONS, ConfigDef.Type.INT, DEFAULT_MAX_PARTITIONS, ConfigDef.Importance.MEDIUM, "Max partitions")
             .define(PRIVATE_TOPIC_PREFIX, ConfigDef.Type.STRING, DEFAULT_PRIVATE_TOPIC_PREFIX, ConfigDef.Importance.MEDIUM, "Internal Partition Prefix")
             .define(TIMEOUT_SECONDS, ConfigDef.Type.INT, DEFAULT_TIMEOUT_SECONDS,ConfigDef.Importance.MEDIUM, "Timeout duration for listing and describing topics")
@@ -107,6 +116,7 @@ public class PartitionCounter implements AutoCloseable {
     private final Integer requestTimeout;
     private final String privateTopicPrefix;
     private final Integer scheduleIntervalSeconds;
+    private final boolean limitEnforced;
 
     /**
      * Creates the shared PartitionCounter if it doesn't already exist. Returns the existing one if it
@@ -136,6 +146,7 @@ public class PartitionCounter implements AutoCloseable {
         maxPartitions = getMaxPartitionsFromConfig(parsedConfig);
         privateTopicPrefix = parsedConfig.getString(PRIVATE_TOPIC_PREFIX);
         scheduleIntervalSeconds = parsedConfig.getInt(SCHEDULE_INTERVAL_SECONDS);
+        limitEnforced = parsedConfig.getBoolean(LIMIT_ENFORCED);
 
         ThreadFactory threadFactory =
                 new ThreadFactoryBuilder().setNameFormat("partition-counter").setDaemon(true).build();
@@ -185,6 +196,13 @@ public class PartitionCounter implements AutoCloseable {
      */
     public int getMaxPartitions() {
         return maxPartitions;
+    }
+
+    /**
+     * @return true if the {@link #LIMIT_ENFORCED} property is explicitly set to true, else false.
+     */
+    public boolean isLimitEnforced() {
+        return limitEnforced;
     }
 
     /**

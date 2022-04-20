@@ -81,6 +81,10 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
     }
 
     private void validateNumPartitions(RequestMetadata requestMetadata) throws PolicyViolationException {
+        if (!partitionCounter.isLimitEnforced()) {
+            return;
+        }
+
         int maxPartitions = partitionCounter.getMaxPartitions();
         if (maxPartitions < 1) {
             return;
