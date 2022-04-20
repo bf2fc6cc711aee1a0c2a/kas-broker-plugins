@@ -4,7 +4,6 @@
 package io.bf2.kafka.authorizer;
 
 import io.bf2.kafka.common.PartitionCounter;
-import io.bf2.kafka.common.PartitionLimitEnforcement;
 import org.apache.kafka.common.acl.AccessControlEntry;
 import org.apache.kafka.common.acl.AclBinding;
 import org.apache.kafka.common.acl.AclBindingFilter;
@@ -280,19 +279,19 @@ class CustomAclAuthorizerTest {
 
     @ParameterizedTest
     @CsvSource({
-            "null, DENIED",
+            "null, ALLOWED",
             "true, DENIED",
             "false, ALLOWED"
     })
     void testPartitionLimitEnforcementFeatureFlag(String featureFlag, AuthorizationResult result) throws Exception {
         KafkaPrincipal superUser = SecurityUtils.parseKafkaPrincipal("User:admin");
         Mockito.when(this.delegate.isSuperUser(superUser)).thenReturn(Boolean.TRUE);
-        PartitionCounter partitionCounter = generateMockPartitionCounter(1001, false);
+        PartitionCounter partitionCounter = generateMockPartitionCounter(1001, false, Boolean.parseBoolean(featureFlag));
         try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate, partitionCounter)) {
             Map<String, Object> customConfig = new HashMap<>(config);
 
             if (!"null".equalsIgnoreCase(featureFlag)) {
-                customConfig.put(PartitionLimitEnforcement.CONFIG_ENABLED, featureFlag);
+                customConfig.put(PartitionCounter.LIMIT_ENFORCED, featureFlag);
             }
 
             auth.configure(customConfig);
@@ -311,16 +310,16 @@ class CustomAclAuthorizerTest {
         }
     }
 
-    private PartitionCounter generateMockPartitionCounter(int numPartitions, boolean response)
+    private PartitionCounter generateMockPartitionCounter(int numPartitions, boolean response, boolean limitEnforced)
             throws InterruptedException, ExecutionException, TimeoutException {
         PartitionCounter partitionCounter = Mockito.mock(PartitionCounter.class);
         Mockito.when(partitionCounter.getMaxPartitions()).thenReturn(1000);
         Mockito.when(partitionCounter.getExistingPartitionCount()).thenReturn(numPartitions);
         Mockito.when(partitionCounter.countExistingPartitions()).thenReturn(numPartitions);
         Mockito.when(partitionCounter.reservePartitions(Mockito.anyInt())).thenReturn(response);
+        Mockito.when(partitionCounter.isLimitEnforced()).thenReturn(limitEnforced);
 
         return partitionCounter;
     }
-
 
 }

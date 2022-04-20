@@ -4,7 +4,6 @@
 package io.bf2.kafka.topic;
 
 import io.bf2.kafka.common.PartitionCounter;
-import io.bf2.kafka.common.PartitionLimitEnforcement;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy;
 import org.slf4j.Logger;
@@ -23,7 +22,6 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
 
     private volatile Map<String, ?> configs;
     private volatile PartitionCounter partitionCounter;
-    private volatile boolean partitionLimitEnforcementEnabled = true;
 
     public ManagedKafkaCreateTopicPolicy() {
     }
@@ -40,8 +38,6 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
         if (partitionCounter == null) {
             partitionCounter = PartitionCounter.create(configs);
         }
-
-        partitionLimitEnforcementEnabled = PartitionLimitEnforcement.isEnabled(configs);
     }
 
     @Override
@@ -55,10 +51,7 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
     public void validate(RequestMetadata requestMetadata) throws PolicyViolationException {
         validateReplicationFactor(requestMetadata);
         validateIsr(requestMetadata);
-
-        if (partitionLimitEnforcementEnabled) {
-            validateNumPartitions(requestMetadata);
-        }
+        validateNumPartitions(requestMetadata);
     }
 
     private void validateReplicationFactor(RequestMetadata requestMetadata) throws PolicyViolationException {
@@ -88,6 +81,10 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
     }
 
     private void validateNumPartitions(RequestMetadata requestMetadata) throws PolicyViolationException {
+        if (!partitionCounter.isLimitEnforced()) {
+            return;
+        }
+
         int maxPartitions = partitionCounter.getMaxPartitions();
         if (maxPartitions < 1) {
             return;
