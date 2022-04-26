@@ -231,8 +231,7 @@ public class PartitionCounter implements AutoCloseable {
                 .get(requestTimeout, TimeUnit.SECONDS)
                 .stream()
                 .map(TopicListing::name)
-                .filter(name -> !name.startsWith(privateTopicPrefix)
-                        && !GROUP_METADATA_TOPIC_NAME.equals(name) && !TRANSACTION_STATE_TOPIC_NAME.equals(name))
+                .filter(name -> !isInternalTopic(name))
                 .collect(Collectors.toList());
 
         return admin.describeTopics(topicNames)
@@ -242,6 +241,11 @@ public class PartitionCounter implements AutoCloseable {
                 .stream()
                 .map(description -> description.partitions().size())
                 .reduce(0, Integer::sum);
+    }
+
+    public boolean isInternalTopic(String name) {
+        return name.startsWith(privateTopicPrefix) || GROUP_METADATA_TOPIC_NAME.equals(name)
+                || TRANSACTION_STATE_TOPIC_NAME.equals(name);
     }
 
     private static int getMaxPartitionsFromConfig(AbstractConfig config) {

@@ -81,7 +81,7 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
     }
 
     private void validateNumPartitions(RequestMetadata requestMetadata) throws PolicyViolationException {
-        if (!partitionCounter.isLimitEnforced()) {
+        if (!partitionCounter.isLimitEnforced() || partitionCounter.isInternalTopic(requestMetadata.topic())) {
             return;
         }
 
