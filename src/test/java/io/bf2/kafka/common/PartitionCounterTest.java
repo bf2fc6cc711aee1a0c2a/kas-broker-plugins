@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class PartitionCounterTest {
@@ -57,6 +59,26 @@ class PartitionCounterTest {
         try (PartitionCounter a = PartitionCounter.create(config);
                 PartitionCounter b = PartitionCounter.create(config)) {
             assertSame(a, b);
+        }
+    }
+
+    @Test
+    void testIsInternalTopic() {
+        Map<String, ?> config = configWith(Map.of(PartitionCounter.PRIVATE_TOPIC_PREFIX, "__private_"));
+        try (PartitionCounter partitionCounter = new PartitionCounter(config)) {
+            assertTrue(partitionCounter.isInternalTopic("__private_topic1"));
+            assertTrue(partitionCounter.isInternalTopic("__consumer_offsets"));
+            assertTrue(partitionCounter.isInternalTopic("__transaction_state"));
+        }
+    }
+
+    @Test
+    void testIsInternalTopicWithEmptyPrivatePrefix() {
+        Map<String, ?> config = configWith(Map.of(PartitionCounter.PRIVATE_TOPIC_PREFIX, ""));
+        try (PartitionCounter partitionCounter = new PartitionCounter(config)) {
+            assertFalse(partitionCounter.isInternalTopic("__private_topic1"));
+            assertTrue(partitionCounter.isInternalTopic("__consumer_offsets"));
+            assertTrue(partitionCounter.isInternalTopic("__transaction_state"));
         }
     }
 

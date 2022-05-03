@@ -244,8 +244,10 @@ public class PartitionCounter implements AutoCloseable {
     }
 
     public boolean isInternalTopic(String name) {
-        return name.startsWith(privateTopicPrefix) || GROUP_METADATA_TOPIC_NAME.equals(name)
-                || TRANSACTION_STATE_TOPIC_NAME.equals(name);
+        return  GROUP_METADATA_TOPIC_NAME.equals(name)
+                || TRANSACTION_STATE_TOPIC_NAME.equals(name)
+                || !"".equals(privateTopicPrefix)
+                && name.startsWith(privateTopicPrefix);
     }
 
     private static int getMaxPartitionsFromConfig(AbstractConfig config) {
