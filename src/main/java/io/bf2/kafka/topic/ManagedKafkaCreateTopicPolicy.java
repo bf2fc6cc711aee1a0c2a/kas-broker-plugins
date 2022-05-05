@@ -49,6 +49,10 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
 
     @Override
     public void validate(RequestMetadata requestMetadata) throws PolicyViolationException {
+        if (partitionCounter.isInternalTopic(requestMetadata.topic())) {
+            return;
+        }
+
         validateReplicationFactor(requestMetadata);
         validateIsr(requestMetadata);
         validateNumPartitions(requestMetadata);

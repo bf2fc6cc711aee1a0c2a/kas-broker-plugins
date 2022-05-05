@@ -299,17 +299,17 @@ public class CustomAclAuthorizer implements Authorizer {
     }
 
     private AuthorizationResult authorizeAction(AuthorizableRequestContext requestContext, Action action) {
+        // is super user allow any operation
+        if (delegate.isSuperUser(requestContext.principal())) {
+            loggingController.logAtLevel(requestContext, action, "super.user ", true);
+            return AuthorizationResult.ALLOWED;
+        }
+
         if (partitionCounter.isLimitEnforced() && requestContext.requestType() == CREATE_PARTITIONS_APIKEY
                 && partitionCounter.getMaxPartitions() > 0
                 && partitionCounter.getRemainingPartitionBudget() <= 0) {
             loggingController.logAtLevel(requestContext, action, "reached partition limit ", false);
             return AuthorizationResult.DENIED;
-        }
-
-        // is super user allow any operation
-        if (delegate.isSuperUser(requestContext.principal())) {
-            loggingController.logAtLevel(requestContext, action, "super.user ", true);
-            return AuthorizationResult.ALLOWED;
         }
 
         // if request made on any allowed listeners allow always
