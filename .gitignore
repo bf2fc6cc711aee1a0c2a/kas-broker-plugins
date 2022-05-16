@@ -1,5 +1,15 @@
-.checkstyle
-.project
-.classpath
 target/
+
+# Eclipse specific
+.project
 .settings/
+.prefs
+.classpath
+
+# IntelliJ IDEA specific
+.idea/
+*.iml
+
+# VS Code
+.factorypath
+.vscode
