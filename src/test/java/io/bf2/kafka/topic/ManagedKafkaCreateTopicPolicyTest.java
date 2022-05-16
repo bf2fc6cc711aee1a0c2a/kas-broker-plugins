@@ -28,6 +28,7 @@ class ManagedKafkaCreateTopicPolicyTest {
             ManagedKafkaCreateTopicPolicy.DEFAULT_REPLICATION_FACTOR, 3,
             ManagedKafkaCreateTopicPolicy.MIN_INSYNC_REPLICAS, 2,
             PartitionCounter.MAX_PARTITIONS, 1000,
+            PartitionCounter.LIMIT_ENFORCED, true,
             LocalAdminClient.LISTENER_NAME, "controlplane",
             LocalAdminClient.LISTENER_PORT, "9090",
             LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT");
@@ -159,6 +160,28 @@ class ManagedKafkaCreateTopicPolicyTest {
             } else {
                 assertDoesNotThrow(() -> policy.validate(ctpRequestMetadata));
             }
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "topic1, 10, 1, 2, DENIED",
+        "topic1, 10, 3, 1, DENIED",
+        "topic1, 9999, 3, 2, DENIED",
+
+        "__redhat_topic1, 10, 1, 2, ALLOWED",
+        "__redhat_topic1, 10, 3, 1, ALLOWED",
+        "__redhat_topic1, 9999, 3, 2, ALLOWED",
+    })
+    void testTopicValidationBypass(String topicName, int partitions, short replicationFactor, int isr,
+            String expectedResult) throws Exception {
+        RequestMetadata ctpRequestMetadata = new RequestMetadata(topicName, partitions, replicationFactor, null,
+                Map.of(ManagedKafkaCreateTopicPolicy.MIN_INSYNC_REPLICAS, String.valueOf(isr)));
+
+        if ("DENIED".equals(expectedResult)) {
+            assertThrows(PolicyViolationException.class, () -> policy.validate(ctpRequestMetadata));
+        } else {
+            assertDoesNotThrow(() -> policy.validate(ctpRequestMetadata));
         }
     }
 

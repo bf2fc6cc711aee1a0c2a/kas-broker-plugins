@@ -279,13 +279,17 @@ class CustomAclAuthorizerTest {
 
     @ParameterizedTest
     @CsvSource({
-            "null, ALLOWED",
-            "true, DENIED",
-            "false, ALLOWED"
+            "null, ALLOWED, false",
+            "true, DENIED, false",
+            "false, ALLOWED, false",
+            "null, ALLOWED, true",
+            "true, ALLOWED, true",
+            "false, ALLOWED, true"
     })
-    void testPartitionLimitEnforcementFeatureFlag(String featureFlag, AuthorizationResult result) throws Exception {
+    void testPartitionLimitEnforcementFeatureFlag(String featureFlag, AuthorizationResult result, boolean isSuperUser)
+            throws Exception {
         KafkaPrincipal superUser = SecurityUtils.parseKafkaPrincipal("User:admin");
-        Mockito.when(this.delegate.isSuperUser(superUser)).thenReturn(Boolean.TRUE);
+        Mockito.when(this.delegate.isSuperUser(superUser)).thenReturn(isSuperUser);
         PartitionCounter partitionCounter = generateMockPartitionCounter(1001, false, Boolean.parseBoolean(featureFlag));
         try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate, partitionCounter)) {
             Map<String, Object> customConfig = new HashMap<>(config);

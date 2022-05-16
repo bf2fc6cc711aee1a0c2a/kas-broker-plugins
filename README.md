@@ -49,3 +49,23 @@ mvn clean install
 
 To configure this with Strimzi, this component needs be built and have the maven artifact available in a Maven repository, that can be reached by the Strimzi build. Then configure the this plugin as a Third Party library such that it will be pulled into the Strimzi Operator image. See `strimzi/docker-images/kafka/kafka-thridparty-libs` and add the dependency to one of the `pom.xml` files and build the Strimzi.
 
+## Releasing
+
+### Release Branch
+*Optional - only required when a new release branch is needed -- for patch releases, skip this branch creation, and instead re-use the existing minor release branch*.
+
+If you are starting on main branch, create a new branch from the main. For example `2.5.x`.
+
+```shell
+git checkout -b 2.5.x main
+git push upstream 2.5.x
+```
+Now release from the `2.5.x` branch a release of `2.5.0`, if you are already releasing from a branch skip the above
+step of creating a new branch and simply checkout that branch.
+
+#### Pull Request
+Releases are performed by modifying the `.github/project.yml` file, setting `current-version` to the release version and `next-version` to the next SNAPSHOT. Open a pull request with the changed `project.yml` to initiate the pre-release workflows. The target of the pull request should be either `main` or a release branch (described above).
+At this phase, the project milestone will be checked and it will be verified that no issues for the release milestone are still open. Additionally, the project's integration tests will be run.
+Once approved and the pull request is merged, the release action will execute. This action will execute the Maven release plugin to tag the release commit, and build the application artifacts. If successful, the action will push the new tag to the GitHub repository and generate release notes listing all of the closed issues included in the milestone. Finally, the milestone will be closed.
+
+
