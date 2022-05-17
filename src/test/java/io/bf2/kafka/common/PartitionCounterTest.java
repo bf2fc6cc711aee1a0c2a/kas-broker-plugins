@@ -5,9 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class PartitionCounterTest {
@@ -55,10 +53,20 @@ class PartitionCounterTest {
 
     @Test
     void testSharedInstance() {
+        assertEquals(0, PartitionCounter.getHandleCount());
+
         Map<String, ?> config = configWith(Map.of());
+        PartitionCounter copy;
         try (PartitionCounter a = PartitionCounter.create(config);
-                PartitionCounter b = PartitionCounter.create(config)) {
+             PartitionCounter b = PartitionCounter.create(config)) {
+            assertEquals(2, PartitionCounter.getHandleCount());
             assertSame(a, b);
+            copy = a;
+        }
+
+        assertEquals(0, PartitionCounter.getHandleCount());
+        try (PartitionCounter again = PartitionCounter.create(config)) {
+            assertNotSame(copy, again);
         }
     }
 

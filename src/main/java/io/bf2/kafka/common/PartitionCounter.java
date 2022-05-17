@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
  *
  * Expected usage is as follows:
  * <ol>
- * <li>Get a handle to the shared instances, using the static {@link #create()} method</li>
+ * <li>Get a handle to the shared instances, using the static {@link #create(Map<String, ?>)} method</li>
  * <li>Reserve partitions using {@link #reservePartitions(int)}</li>
  * <li>If it returns true, then the request was within the budget, and the partitions can be
  * created.</li>
@@ -134,6 +134,10 @@ public class PartitionCounter implements AutoCloseable {
         return partitionCounter;
     }
 
+    private static void reset() {
+        partitionCounter = null;
+    }
+
     PartitionCounter(Map<String, ?> config) {
         AbstractConfig parsedConfig = new AbstractConfig(configDef, config);
 
@@ -153,15 +157,22 @@ public class PartitionCounter implements AutoCloseable {
         scheduler = Executors.newScheduledThreadPool(1, threadFactory);
     }
 
+    synchronized static int getHandleCount() {
+        return partitionCounter == null ? 0 : partitionCounter.handles.get();
+    }
+
     @Override
     public void close() {
-        if (handles.decrementAndGet() == 0) {
-            if (scheduler != null) {
-                scheduler.shutdownNow();
-            }
+        synchronized (PartitionCounter.class) {
+            if (handles.decrementAndGet() == 0) {
+                if (scheduler != null) {
+                    scheduler.shutdownNow();
+                }
 
-            if (admin != null) {
-                admin.close(Duration.ofMillis(500));
+                if (admin != null) {
+                    admin.close(Duration.ofMillis(500));
+                }
+                reset();
             }
         }
     }
