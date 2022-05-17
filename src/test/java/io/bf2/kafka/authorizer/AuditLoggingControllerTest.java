@@ -93,7 +93,7 @@ class AuditLoggingControllerTest {
         auditLoggingController.logAuditMessage(fetchRequestContext, infoAction, true);
 
         //Then
-        assertEquals(minLoggedEventCount, loggingEvents.size());
+        assertMinEventCount(minLoggedEventCount, loggingEvents.size());
     }
 
     @Test
@@ -114,7 +114,7 @@ class AuditLoggingControllerTest {
         }
 
         //Then
-        assertEquals(minLoggedEventCount, loggingEvents.size());
+        assertMinEventCount(minLoggedEventCount, loggingEvents.size());
     }
 
     @Test
@@ -350,7 +350,7 @@ class AuditLoggingControllerTest {
         auditLoggingController.evictWindowedEvents();
 
         //Then
-        assertEquals(minLoggedEventCount, loggingEvents.size());
+        assertMinEventCount(minLoggedEventCount, loggingEvents.size());
     }
 
     @SuppressWarnings("SameParameterValue")
@@ -391,4 +391,9 @@ class AuditLoggingControllerTest {
         when(rc.principal()).thenReturn(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "test"));
         return rc;
     }
+
+    private void assertMinEventCount(int expectedMinEventCount, int actualEventCount) {
+        assertTrue(actualEventCount >= expectedMinEventCount, String.format("Too few events logged, expected at least %d, saw %d", expectedMinEventCount, actualEventCount));
+    }
+
 }
