@@ -163,7 +163,7 @@
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <configuration>
                     <argLine>-Xmx1024m</argLine>
-                    <forkedProcessTimeoutInSeconds>60</forkedProcessTimeoutInSeconds>
+                    <forkedProcessTimeoutInSeconds>90</forkedProcessTimeoutInSeconds>
                     <redirectTestOutputToFile>true</redirectTestOutputToFile>
                 </configuration>
                 <executions>
