@@ -102,11 +102,11 @@ public class PartitionCounter implements AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(AclLoggingConfig.class);
 
     private static volatile PartitionCounter partitionCounter;
+    private static final AtomicInteger handles = new AtomicInteger();
 
     private final int maxPartitions;
 
     private final Admin admin;
-    private final AtomicInteger handles;
     private final AtomicInteger existingPartitionCount;
     private final AtomicInteger remainingPartitionBudget;
 
@@ -130,18 +130,34 @@ public class PartitionCounter implements AutoCloseable {
             partitionCounter = new PartitionCounter(config);
             partitionCounter.start();
         }
-        partitionCounter.handles.incrementAndGet();
+        handles.incrementAndGet();
         return partitionCounter;
     }
 
-    private static void reset() {
-        partitionCounter = null;
+    private static synchronized void release() {
+        if (handles.updateAndGet(i -> i > 0 ? i - 1 : i) == 0 && partitionCounter != null) {
+            try {
+                if (partitionCounter.scheduler != null) {
+                    partitionCounter.scheduler.shutdownNow();
+                }
+
+                if (partitionCounter.admin != null) {
+                    partitionCounter.admin.close(Duration.ofMillis(500));
+                }
+
+            } finally {
+                partitionCounter = null;
+            }
+        }
+    }
+
+    static synchronized int getHandleCount() {
+        return handles.get();
     }
 
     PartitionCounter(Map<String, ?> config) {
         AbstractConfig parsedConfig = new AbstractConfig(configDef, config);
 
-        handles = new AtomicInteger(0);
         admin = LocalAdminClient.create(config);
         existingPartitionCount = new AtomicInteger(0);
         remainingPartitionBudget = new AtomicInteger(0);
@@ -157,24 +173,9 @@ public class PartitionCounter implements AutoCloseable {
         scheduler = Executors.newScheduledThreadPool(1, threadFactory);
     }
 
-    synchronized static int getHandleCount() {
-        return partitionCounter == null ? 0 : partitionCounter.handles.get();
-    }
-
     @Override
     public void close() {
-        synchronized (PartitionCounter.class) {
-            if (handles.decrementAndGet() == 0) {
-                if (scheduler != null) {
-                    scheduler.shutdownNow();
-                }
-
-                if (admin != null) {
-                    admin.close(Duration.ofMillis(500));
-                }
-                reset();
-            }
-        }
+        release();
     }
 
     /**
