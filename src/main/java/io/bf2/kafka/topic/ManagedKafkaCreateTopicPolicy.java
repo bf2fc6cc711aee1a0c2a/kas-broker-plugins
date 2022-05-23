@@ -3,7 +3,7 @@
  */
 package io.bf2.kafka.topic;
 
-import io.bf2.kafka.common.PartitionCounter;
+import io.bf2.kafka.common.*;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy;
 import org.slf4j.Logger;
@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
@@ -56,6 +57,15 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
         validateReplicationFactor(requestMetadata);
         validateIsr(requestMetadata);
         validateNumPartitions(requestMetadata);
+        validateConfigs(requestMetadata);
+    }
+
+    private void validateConfigs(RequestMetadata requestMetadata) throws PolicyViolationException {
+        Map<String, String> configs = requestMetadata.configs();
+        if (!configs.isEmpty() && !ConfigRules.isValid(configs)) {
+            throw new PolicyViolationException(
+                    String.format("Topic %s configured with invalid configs: %d", requestMetadata.topic(), requestMetadata.configs()));
+        }
     }
 
     private void validateReplicationFactor(RequestMetadata requestMetadata) throws PolicyViolationException {
