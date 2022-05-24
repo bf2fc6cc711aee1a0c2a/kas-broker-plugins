@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
  *
  * Expected usage is as follows:
  * <ol>
- * <li>Get a handle to the shared instances, using the static {@link #create()} method</li>
+ * <li>Get a handle to the shared instances, using the static {@link #create)} method</li>
  * <li>Reserve partitions using {@link #reservePartitions(int)}</li>
  * <li>If it returns true, then the request was within the budget, and the partitions can be
  * created.</li>
@@ -92,7 +92,7 @@ public class PartitionCounter implements AutoCloseable {
     private static final String GROUP_METADATA_TOPIC_NAME = "__consumer_offsets";
     private static final String TRANSACTION_STATE_TOPIC_NAME = "__transaction_state";
 
-    private static final ConfigDef configDef = new ConfigDef()
+    public static final ConfigDef configDef = new ConfigDef()
             .define(LIMIT_ENFORCED, ConfigDef.Type.BOOLEAN, DEFAULT_LIMIT_ENFORCED, ConfigDef.Importance.MEDIUM, "Feature flag to allow enabling of partition limit enforcement")
             .define(MAX_PARTITIONS, ConfigDef.Type.INT, DEFAULT_MAX_PARTITIONS, ConfigDef.Importance.MEDIUM, "Max partitions")
             .define(PRIVATE_TOPIC_PREFIX, ConfigDef.Type.STRING, DEFAULT_PRIVATE_TOPIC_PREFIX, ConfigDef.Importance.MEDIUM, "Internal Partition Prefix")
@@ -199,6 +199,14 @@ public class PartitionCounter implements AutoCloseable {
     }
 
     /**
+     * @return the value of the {@link #MAX_PARTITIONS} key in the broker configs, or a default of
+     *         {@link #DEFAULT_MAX_PARTITIONS} if not set.
+     */
+    public String getPrivateTopicPrefix() {
+        return privateTopicPrefix;
+    }
+
+    /**
      * @return true if the {@link #LIMIT_ENFORCED} property is explicitly set to true, else false.
      */
     public boolean isLimitEnforced() {
@@ -244,9 +252,13 @@ public class PartitionCounter implements AutoCloseable {
     }
 
     public boolean isInternalTopic(String name) {
-        return  GROUP_METADATA_TOPIC_NAME.equals(name)
+        return isInternalTopic(name, privateTopicPrefix);
+    }
+
+    public static boolean isInternalTopic(String name, String privateTopicPrefix) {
+        return GROUP_METADATA_TOPIC_NAME.equals(name)
                 || TRANSACTION_STATE_TOPIC_NAME.equals(name)
-                || (!"".equals(privateTopicPrefix) && name.startsWith(privateTopicPrefix));
+                || (!privateTopicPrefix.isEmpty() && name.startsWith(privateTopicPrefix));
     }
 
     private static int getMaxPartitionsFromConfig(AbstractConfig config) {
