@@ -6,6 +6,8 @@ package io.bf2.kafka.authorizer;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.bf2.kafka.common.Config;
 import io.bf2.kafka.common.PartitionCounter;
 import org.apache.kafka.common.Endpoint;
 import org.apache.kafka.common.acl.AccessControlEntryFilter;
@@ -105,7 +107,7 @@ public class CustomAclAuthorizer implements Authorizer {
     static final String CREATE_ACL_INVALID_PRINCIPAL = "Invalid ACL principal name";
     static final String CREATE_ACL_INVALID_BINDING = "Invalid ACL resource or operation";
 
-    static final String CONFIG_PREFIX = "strimzi.authorization.custom-authorizer.";
+    static final String CONFIG_PREFIX = Config.PREFIX + "authorizer.";
     static final String RESOURCE_OPERATIONS_KEY = CONFIG_PREFIX + "resource-operations";
 
     static final ResourcePatternFilter ANY_RESOURCE = new ResourcePatternFilter(ResourceType.ANY, null, PatternType.ANY);

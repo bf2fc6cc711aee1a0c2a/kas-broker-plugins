@@ -59,7 +59,7 @@ public class PartitionCounter implements AutoCloseable {
      * this property is not specified, a default of {@link #DEFAULT_TIMEOUT_SECONDS} will be used in
      * this class.
      */
-    public static final String TIMEOUT_SECONDS = "strimzi.authorization.custom-authorizer.partition-counter.timeout-seconds";
+    public static final String TIMEOUT_SECONDS = Config.CREATE_TOPIC_POLICY_PREFIX + "partition-counter.timeout-seconds";
 
     /**
      * Custom broker property key, used to specify the topic prefix to match for private/internal topics
@@ -67,21 +67,21 @@ public class PartitionCounter implements AutoCloseable {
      * counted. If this property is not specified, a default of {@link #DEFAULT_PRIVATE_TOPIC_PREFIX}
      * will be used in this class.
      */
-    public static final String PRIVATE_TOPIC_PREFIX = "strimzi.authorization.custom-authorizer.partition-counter.private-topic-prefix";
+    public static final String PRIVATE_TOPIC_PREFIX = Config.CREATE_TOPIC_POLICY_PREFIX + "partition-counter.private-topic-prefix";
 
     /**
      * Custom broker property key, used to specify the interval (in seconds) at which to schedule
      * partition counts. If this property is not specified, a default of
      * {@link #DEFAULT_SCHEDULE_INTERVAL_SECONDS} will be used in this class.
      */
-    public static final String SCHEDULE_INTERVAL_SECONDS = "strimzi.authorization.custom-authorizer.partition-counter.schedule-interval-seconds";
+    public static final String SCHEDULE_INTERVAL_SECONDS = Config.CREATE_TOPIC_POLICY_PREFIX + "partition-counter.schedule-interval-seconds";
 
     /**
      * Feature flag broker property key to allow disabling of partition limit enforcement. If this
      * property is not specified, a default of {@link #DEFAULT_LIMIT_ENFORCED} will be returned through
      * the {@link #isLimitEnforced()} method.
      */
-    public static final String LIMIT_ENFORCED = "strimzi.authorization.custom-authorizer.partition-limit-enforced";
+    public static final String LIMIT_ENFORCED = Config.CREATE_TOPIC_POLICY_PREFIX + "partition-limit-enforced";
 
     static final int DEFAULT_MAX_PARTITIONS = -1;
     static final int DEFAULT_TIMEOUT_SECONDS = 10;

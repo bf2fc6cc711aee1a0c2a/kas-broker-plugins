@@ -15,10 +15,10 @@ kafka:
       superUsers:
         - CN=sre_user
     config:
-      strimzi.authorization.custom-authorizer.allowed-listeners=plain-9092,canary-9096
-      strimzi.authorization.custom-authorizer.acl.1: permission=allow;topic=foo;operations=read,write,create
-      strimzi.authorization.custom-authorizer.acl.2: permission=allow;topic=*;operations=read
-      strimzi.authorization.custom-authorizer.acl.3: permission=deny;group=xyz;operations=read,create
+      kas.authorizer.allowed-listeners=plain-9092,canary-9096
+      kas.authorizer.acl.1: permission=allow;topic=foo;operations=read,write,create
+      kas.authorizer.acl.2: permission=allow;topic=*;operations=read
+      kas.authorizer.acl.3: permission=deny;group=xyz;operations=read,create
 ```
 
 "allowed-listeners" defines list of listener names separated by comma(,) which are treated as super user access, any user that made a request using one of this listeners those requests will always be allowed.
@@ -67,5 +67,3 @@ step of creating a new branch and simply checkout that branch.
 Releases are performed by modifying the `.github/project.yml` file, setting `current-version` to the release version and `next-version` to the next SNAPSHOT. Open a pull request with the changed `project.yml` to initiate the pre-release workflows. The target of the pull request should be either `main` or a release branch (described above).
 At this phase, the project milestone will be checked and it will be verified that no issues for the release milestone are still open. Additionally, the project's integration tests will be run.
 Once approved and the pull request is merged, the release action will execute. This action will execute the Maven release plugin to tag the release commit, and build the application artifacts. If successful, the action will push the new tag to the GitHub repository and generate release notes listing all of the closed issues included in the milestone. Finally, the milestone will be closed.
-
-
