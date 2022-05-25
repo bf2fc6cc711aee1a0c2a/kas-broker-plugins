@@ -178,10 +178,11 @@ class ManagedKafkaCreateTopicPolicyTest {
         RequestMetadata ctpRequestMetadata = new RequestMetadata(topicName, partitions, replicationFactor, null,
                 Map.of(ManagedKafkaCreateTopicPolicy.MIN_INSYNC_REPLICAS, String.valueOf(isr)));
 
+        String message = String.format("Test topic name: %s, partitions: %d, replicationFactor: %d, isr: %d, expectedResult %s", topicName, partitions, replicationFactor, isr, expectedResult);
         if ("DENIED".equals(expectedResult)) {
-            assertThrows(PolicyViolationException.class, () -> policy.validate(ctpRequestMetadata));
+            assertThrows(message, PolicyViolationException.class, () -> policy.validate(ctpRequestMetadata));
         } else {
-            assertDoesNotThrow(() -> policy.validate(ctpRequestMetadata));
+            assertDoesNotThrow(() -> policy.validate(ctpRequestMetadata), message);
         }
     }
 

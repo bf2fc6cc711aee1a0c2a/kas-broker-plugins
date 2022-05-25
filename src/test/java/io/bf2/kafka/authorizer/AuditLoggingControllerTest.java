@@ -11,6 +11,7 @@ import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.server.authorizer.Action;
 import org.apache.kafka.server.authorizer.AuthorizableRequestContext;
 import org.apache.log4j.spi.LoggingEvent;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,6 +53,13 @@ class AuditLoggingControllerTest {
         fetchRequestContext = stubRequestContext(ApiKeys.FETCH);
         infoAction = new Action(AclOperation.READ,
                 new ResourcePattern(ResourceType.TOPIC, "baz", PatternType.LITERAL), 0, true, true);
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (auditLoggingController != null) {
+            auditLoggingController.close();
+        }
     }
 
     @ParameterizedTest
