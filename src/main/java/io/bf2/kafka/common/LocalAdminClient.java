@@ -16,9 +16,10 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class LocalAdminClient {
-    public static final String LISTENER_NAME = Config.CREATE_TOPIC_POLICY_PREFIX + "adminclient-listener.name";
-    public static final String LISTENER_PORT = Config.CREATE_TOPIC_POLICY_PREFIX + "adminclient-listener.port";
-    public static final String LISTENER_PROTOCOL = Config.CREATE_TOPIC_POLICY_PREFIX + "adminclient-listener.protocol";
+    private static final String SHARED_ADMIN_PREFIX = Config.POLICY_PREFIX + "shared-admin.";
+    public static final String LISTENER_NAME = SHARED_ADMIN_PREFIX + "adminclient-listener.name";
+    public static final String LISTENER_PORT = SHARED_ADMIN_PREFIX + "adminclient-listener.port";
+    public static final String LISTENER_PROTOCOL = SHARED_ADMIN_PREFIX + "adminclient-listener.protocol";
 
     public static Admin create(Map<String, ?> configs) {
 
