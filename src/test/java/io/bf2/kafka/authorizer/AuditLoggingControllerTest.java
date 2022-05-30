@@ -11,6 +11,7 @@ import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.server.authorizer.Action;
 import org.apache.kafka.server.authorizer.AuthorizableRequestContext;
 import org.apache.log4j.spi.LoggingEvent;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,6 +55,13 @@ class AuditLoggingControllerTest {
                 new ResourcePattern(ResourceType.TOPIC, "baz", PatternType.LITERAL), 0, true, true);
     }
 
+    @AfterEach
+    void tearDown() {
+        if (auditLoggingController != null) {
+            auditLoggingController.close();
+        }
+    }
+
     @ParameterizedTest
     @CsvSource({
             "Test log level for unspecified binding is INFO, INFO, IDEMPOTENT_WRITE, OFFSET_COMMIT, CLUSTER, kafka-cluster, User:test, true",
@@ -93,7 +101,7 @@ class AuditLoggingControllerTest {
         auditLoggingController.logAuditMessage(fetchRequestContext, infoAction, true);
 
         //Then
-        assertEquals(minLoggedEventCount, loggingEvents.size());
+        assertMinEventCount(minLoggedEventCount, loggingEvents.size());
     }
 
     @Test
@@ -114,7 +122,7 @@ class AuditLoggingControllerTest {
         }
 
         //Then
-        assertEquals(minLoggedEventCount, loggingEvents.size());
+        assertMinEventCount(minLoggedEventCount, loggingEvents.size());
     }
 
     @Test
@@ -350,7 +358,7 @@ class AuditLoggingControllerTest {
         auditLoggingController.evictWindowedEvents();
 
         //Then
-        assertEquals(minLoggedEventCount, loggingEvents.size());
+        assertMinEventCount(minLoggedEventCount, loggingEvents.size());
     }
 
     @SuppressWarnings("SameParameterValue")
@@ -391,4 +399,9 @@ class AuditLoggingControllerTest {
         when(rc.principal()).thenReturn(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "test"));
         return rc;
     }
+
+    private void assertMinEventCount(int expectedMinEventCount, int actualEventCount) {
+        assertTrue(actualEventCount >= expectedMinEventCount, String.format("Too few events logged, expected at least %d, saw %d", expectedMinEventCount, actualEventCount));
+    }
+
 }
