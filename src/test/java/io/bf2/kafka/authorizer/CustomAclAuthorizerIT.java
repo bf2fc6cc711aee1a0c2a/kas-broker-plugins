@@ -122,9 +122,9 @@ class CustomAclAuthorizerIT {
             config.put(ACL_PREFIX + String.valueOf(i + 2), testAcls[i]);
         }
         config.put(ALLOWED_LISTENERS, "PLAIN-9092,SRE-9096");
-        config.put("strimzi.authorization.custom-authorizer.adminclient-listener.name", "PLAIN-9092");
-        config.put("strimzi.authorization.custom-authorizer.adminclient-listener.port", "9092");
-        config.put("strimzi.authorization.custom-authorizer.adminclient-listener.protocol", "PLAINTEXT");
+        config.put("kas.policy.shared-admin.adminclient-listener.name", "PLAIN-9092");
+        config.put("kas.policy.shared-admin.adminclient-listener.port", "9092");
+        config.put("kas.policy.shared-admin.adminclient-listener.protocol", "PLAINTEXT");
         return config;
     }
 

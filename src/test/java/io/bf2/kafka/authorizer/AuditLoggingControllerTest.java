@@ -343,7 +343,7 @@ class AuditLoggingControllerTest {
         //Given
         final Properties properties = new Properties();
         //specifically test the APIs property as that is externally observable.
-        properties.setProperty("strimzi.authorization.custom-authorizer.acl.logging.suppressionWindow.apis", "");
+        properties.setProperty("kas.authorizer.acl.logging.suppressionWindow.apis", "");
         Map<String, String> customConfig = Maps.fromProperties(properties);
         auditLoggingController.configure(customConfig);
 
