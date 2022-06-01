@@ -3,7 +3,8 @@
  */
 package io.bf2.kafka.topic;
 
-import io.bf2.kafka.common.*;
+import io.bf2.kafka.common.PartitionCounter;
+import io.bf2.kafka.common.ConfigRules;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy;
 import org.slf4j.Logger;
@@ -14,9 +15,10 @@ import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
+import static org.apache.kafka.common.config.TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG;
+
 public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
     protected static final String DEFAULT_REPLICATION_FACTOR = "default.replication.factor";
-    protected static final String MIN_INSYNC_REPLICAS = "min.insync.replicas";
 
     private static final Logger log = LoggerFactory.getLogger(ManagedKafkaCreateTopicPolicy.class);
 
@@ -37,9 +39,9 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
         this.configs = configs;
         this.configRules = new ConfigRules(configs);
 
-//        if (partitionCounter == null) {
-//            partitionCounter = PartitionCounter.create(configs);
-//        }
+        if (partitionCounter == null) {
+            partitionCounter = PartitionCounter.create(configs);
+        }
     }
 
     @Override
@@ -51,13 +53,13 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
 
     @Override
     public void validate(RequestMetadata requestMetadata) throws PolicyViolationException {
-//        if (partitionCounter.isInternalTopic(requestMetadata.topic())) {
-//            return;
-//        }
+        if (partitionCounter.isInternalTopic(requestMetadata.topic())) {
+            return;
+        }
 
-//        validateReplicationFactor(requestMetadata);
-//        validateIsr(requestMetadata);
-//        validateNumPartitions(requestMetadata);
+        validateReplicationFactor(requestMetadata);
+        validateIsr(requestMetadata);
+        validateNumPartitions(requestMetadata);
         validateConfigs(requestMetadata);
     }
 
@@ -83,7 +85,7 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
         Optional<Short> defaultIsr = defaultIsr();
 
         // grab the client's isr value if present
-        Optional<Short> isr = getConfig(MIN_INSYNC_REPLICAS, requestMetadata.configs())
+        Optional<Short> isr = getConfig(MIN_IN_SYNC_REPLICAS_CONFIG, requestMetadata.configs())
                 .map(v -> Short.valueOf(v.toString()));
 
         // if not present, cluster default value taken automatically, otherwise
@@ -131,7 +133,7 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
     }
 
     private Optional<Short> defaultIsr() {
-        return getConfig(MIN_INSYNC_REPLICAS, this.configs)
+        return getConfig(MIN_IN_SYNC_REPLICAS_CONFIG, this.configs)
                 .map(v -> Short.valueOf(v.toString()));
     }
 

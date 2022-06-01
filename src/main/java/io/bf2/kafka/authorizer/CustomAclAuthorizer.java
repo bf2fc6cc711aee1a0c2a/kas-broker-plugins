@@ -6,7 +6,9 @@ package io.bf2.kafka.authorizer;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.bf2.kafka.common.*;
+
+import io.bf2.kafka.common.Config;
+import io.bf2.kafka.common.PartitionCounter;
 import org.apache.kafka.common.Endpoint;
 import org.apache.kafka.common.acl.AccessControlEntryFilter;
 import org.apache.kafka.common.acl.AclBinding;
@@ -100,13 +102,12 @@ import java.util.stream.IntStream;
 public class CustomAclAuthorizer implements Authorizer {
 
     private static final int CREATE_PARTITIONS_APIKEY = 37;
-    private static final int INCREMENTAL_ALTER_CONFIGS = 44;
     private static final Logger log = LoggerFactory.getLogger(CustomAclAuthorizer.class);
 
     static final String CREATE_ACL_INVALID_PRINCIPAL = "Invalid ACL principal name";
     static final String CREATE_ACL_INVALID_BINDING = "Invalid ACL resource or operation";
 
-    static final String CONFIG_PREFIX = "strimzi.authorization.custom-authorizer.";
+    static final String CONFIG_PREFIX = Config.PREFIX + "authorizer.";
     static final String RESOURCE_OPERATIONS_KEY = CONFIG_PREFIX + "resource-operations";
 
     static final ResourcePatternFilter ANY_RESOURCE = new ResourcePatternFilter(ResourceType.ANY, null, PatternType.ANY);
@@ -122,7 +123,6 @@ public class CustomAclAuthorizer implements Authorizer {
     static final String ALLOWED_LISTENERS = CONFIG_PREFIX + "allowed-listeners";
     static final String ACL_PREFIX = CONFIG_PREFIX + "acl.";
     static final Pattern ACL_PATTERN = Pattern.compile(Pattern.quote(ACL_PREFIX) + "\\d+");
-
 
     static final Map<AclPermissionType, AuthorizationResult> permissionResults = Map.ofEntries(
             Map.entry(AclPermissionType.ALLOW, AuthorizationResult.ALLOWED),
@@ -313,8 +313,6 @@ public class CustomAclAuthorizer implements Authorizer {
             loggingController.logAtLevel(requestContext, action, "reached partition limit ", false);
             return AuthorizationResult.DENIED;
         }
-
-        if (requestContext.requestType() == INCREMENTAL_ALTER_CONFIGS) {}
 
         // if request made on any allowed listeners allow always
         if (isAllowedListener(requestContext.listenerName())) {
