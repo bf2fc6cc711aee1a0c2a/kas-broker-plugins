@@ -1,12 +1,16 @@
 package io.bf2.kafka.topic;
 
+import io.bf2.kafka.common.ConfigRules;
 import io.bf2.kafka.common.LocalAdminClient;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.AlterConfigPolicy.RequestMetadata;
+import org.apache.kafka.server.policy.CreateTopicPolicy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mockito;
 
 import java.util.Map;
@@ -24,7 +28,9 @@ class ManagedKafkaAlterConfigPolicyTest {
     private Map<String, Object> configs = Map.of(
             LocalAdminClient.LISTENER_NAME, "controlplane",
             LocalAdminClient.LISTENER_PORT, "9090",
-            LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT");
+            LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT",
+            ConfigRules.ALLOW_DEFAULT_CONFIG_VALUE_CONFIGS, "compression.type:producer,unclean.leader.election.enable:false",
+            ConfigRules.NOT_ALLOW_UPDATE_CONFIGS, "message.format.version");
 
     @BeforeEach
     void setup() {
@@ -42,53 +48,61 @@ class ManagedKafkaAlterConfigPolicyTest {
         RequestMetadata r = buildRequest();
         assertDoesNotThrow(() -> policy.validate(r));
     }
-
-//    @Test
-//    void testInvalidCompressionType() {
-//        RequestMetadata r = buildRequest();
-//        Mockito.when(r.configs()).thenReturn(Map.of(COMPRESSION_TYPE_CONFIG, "gzip"));
-//        assertThrows(PolicyViolationException.class, () -> policy.validate(r));
-//    }
-//
-//    @Test
-//    void testValidFileDeleteDelayMs() {
-//        RequestMetadata r = buildRequest();
-//        Mockito.when(r.configs()).thenReturn(Map.of(FILE_DELETE_DELAY_MS_CONFIG, "60000"));
-//        assertDoesNotThrow(() -> policy.validate(r));
-//    }
-
-    @Test
-    void testInvalidMaxMessageBytes() {
+    @ParameterizedTest
+    @CsvSource({
+            // compression.type only allows default producer as value
+            "compression.type, producer, true",
+            "compression.type, gzip, false",
+            "compression.type, snappy, false",
+            "compression.type, lz4, false",
+            "compression.type, zstd, false",
+            "compression.type, uncompressed, false",
+            // unclean.leader.election.enable only allows default false as value
+            "unclean.leader.election.enable, false, true",
+            "unclean.leader.election.enable, true, false",
+    })
+    void testDefaultConfigValueRules(String configKey, String configVal, boolean isValid) {
         RequestMetadata r = buildRequest();
-        Mockito.when(r.configs()).thenReturn(Map.of(MAX_MESSAGE_BYTES_CONFIG, String.valueOf(Integer.parseInt(DEFAULT_MAX_MESSAGE_BYTE_ALLOWED) + 1)));
+        Mockito.when(r.configs()).thenReturn(Map.of(configKey, configVal));
+        if (isValid) {
+            assertDoesNotThrow(() -> policy.validate(r));
+        } else {
+            assertThrows(PolicyViolationException.class, () -> policy.validate(r));
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            // the following config cannot be updated
+            "message.format.version"
+    })
+    void testNotAllowUpdateConfigValueRules(String configKey) {
+        RequestMetadata r = buildRequest();
+        Mockito.when(r.configs()).thenReturn(Map.of(configKey, "Doesn't matter"));
         assertThrows(PolicyViolationException.class, () -> policy.validate(r));
     }
 
-    @Test
-    void testValidMaxMessageBytes() {
+    @ParameterizedTest
+    @CsvSource({
+            // max.message.bytes only allows value less than or equal to 1048588
+            "max.message.bytes, 1048588, true",
+            "max.message.bytes, 0, true",
+            "max.message.bytes, 1048589, false"
+    })
+    void testLessThanAndEqualToConfigValueRules(String configKey, String configVal, boolean isValid) {
         RequestMetadata r = buildRequest();
-        Mockito.when(r.configs()).thenReturn(Map.of(MAX_MESSAGE_BYTES_CONFIG, String.valueOf(Integer.parseInt(DEFAULT_MAX_MESSAGE_BYTE_ALLOWED) - 1)));
-        assertDoesNotThrow(() -> policy.validate(r));
-    }
-
-    @Test
-    void testInvalidMinInsyncReplicas() {
-        RequestMetadata r = buildRequest();
-        Mockito.when(r.configs()).thenReturn(Map.of(MIN_IN_SYNC_REPLICAS_CONFIG, "3"));
-        assertThrows(PolicyViolationException.class, () -> policy.validate(r));
-    }
-
-    @Test
-    void testInvalidLeaderReplicationThrottledReplicas() {
-        RequestMetadata r = buildRequest();
-        Mockito.when(r.configs()).thenReturn(Map.of(LEADER_REPLICATION_THROTTLED_REPLICAS_CONFIG, "*"));
-        assertThrows(PolicyViolationException.class, () -> policy.validate(r));
+        Mockito.when(r.configs()).thenReturn(Map.of(configKey, configVal));
+        if (isValid) {
+            assertDoesNotThrow(() -> policy.validate(r));
+        } else {
+            assertThrows(PolicyViolationException.class, () -> policy.validate(r));
+        }
     }
 
 //    @Test
 //    void testIsrSameAsDefault() {
 //        RequestMetadata r = buildRequest();
-//        Mockito.when(r.configs()).thenReturn(Map.of(ManagedKafkaCreateTopicPolicy.MIN_INSYNC_REPLICAS, "2"));
+//        Mockito.when(r.configs()).thenReturn(Map.of(MIN_IN_SYNC_REPLICAS_CONFIG, "2"));
 //        assertDoesNotThrow(() -> policy.validate(r));
 //    }
 

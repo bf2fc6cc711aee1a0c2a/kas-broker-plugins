@@ -39,10 +39,11 @@ public class ConfigRules {
     );
 
     public static final String DEFAULT_MAX_MESSAGE_BYTE_ALLOWED = "1048588";
+    public static final Set<String> DEFAULT_LESS_THAN_AND_EQUAL_TO_CONFIG_SET = Set.of(MAX_MESSAGE_BYTES_CONFIG + ":" + DEFAULT_MAX_MESSAGE_BYTE_ALLOWED);
 
     public static final String DEFAULT_CONFIG_VALUE_CONFIGS = String.join(",", DEFAULT_CONFIG_WITH_DEFAULT_VALUE_SET);
     public static final String DEFAULT_NOT_ALLOW_UPDATE_CONFIGS = String.join(",", DEFAULT_CONFIG_CANNOT_UPDATE_SET);
-    public static final String DEFAULT_LESS_THAN_AND_EQUAL_TO_CONFIGS = MAX_MESSAGE_BYTES_CONFIG + ":" + DEFAULT_MAX_MESSAGE_BYTE_ALLOWED;
+    public static final String DEFAULT_LESS_THAN_AND_EQUAL_TO_CONFIGS = String.join(",", DEFAULT_LESS_THAN_AND_EQUAL_TO_CONFIG_SET);
 
     public final Set<ConfigRule> CONFIG_RULES = new HashSet<>();
 
@@ -64,6 +65,18 @@ public class ConfigRules {
         CONFIG_RULES.add(new DefaultConfigValueRule(defaultValueConfigs));
         CONFIG_RULES.add(new NotAllowUpdateRule(notAllowUpdateConfigs));
         CONFIG_RULES.add(new AllowLessThanAndEqualToRule(lessThanAndEqualToConfigs));
+    }
+
+    public Map<String, String> getDefaultValueConfigs() {
+        return defaultValueConfigs;
+    }
+
+    public Map<String, String> getLessThanAndEqualToConfigs() {
+        return lessThanAndEqualToConfigs;
+    }
+
+    public Set<String> getNotAllowUpdateConfigs() {
+        return notAllowUpdateConfigs;
     }
 
     public void validateTopicConfigs(String topic, Map<String, String> configs) {
