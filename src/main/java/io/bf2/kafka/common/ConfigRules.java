@@ -9,15 +9,31 @@ import java.util.stream.Collectors;
 import static org.apache.kafka.common.config.TopicConfig.*;
 import static org.apache.kafka.common.config.TopicConfig.UNCLEAN_LEADER_ELECTION_ENABLE_CONFIG;
 
+/**
+ * A class that parse the user provided rule configs to create all rules, and validates the provided configs.  
+ */
 public class ConfigRules {
-    // should be updated after https://github.com/bf2fc6cc711aee1a0c2a/kafka-group-authorizer/pull/37 merged
-    public static final String TOPIC_CONFIG_POLICY_PREFIX = "kas.policy." + "topic-config.";
+    public static final String ALTER_CONFIG_POLICY_PREFIX = Config.POLICY_PREFIX + "topic-config.";
 
-    public static final String ALLOW_DEFAULT_CONFIG_VALUE_CONFIGS = TOPIC_CONFIG_POLICY_PREFIX + "default";
-    public static final String NOT_ALLOW_UPDATE_CONFIGS = TOPIC_CONFIG_POLICY_PREFIX + "no.update";
-    public static final String LESS_THAN_AND_EQUAL_TO_CONFIGS = TOPIC_CONFIG_POLICY_PREFIX + "less.equal";
+    /**
+     * Custom broker property key, used to specify the configs with permitted value. It's a list in the form [keyA]:[valueA],[keyB]:[valueB].
+     * If this property is not specified, a default of {@link #DEFAULT_CONFIG_WITH_ONE_VALUE_SET} will be used in this class.
+     */
+    public static final String ALLOW_ONE_CONFIG_VALUE_CONFIGS = ALTER_CONFIG_POLICY_PREFIX + "one.value";
 
-    public static final Set<String> DEFAULT_CONFIG_WITH_DEFAULT_VALUE_SET = Set.of(
+    /**
+     * Custom broker property key, used to specify the configs that cannot be updated. It's a comma seperated list.
+     * If this property is not specified, a default of {@link #DEFAULT_CONFIG_CANNOT_UPDATE_SET} will be used in this class.
+     */
+    public static final String NOT_ALLOW_UPDATE_CONFIGS = ALTER_CONFIG_POLICY_PREFIX + "no.update";
+
+    /**
+     * Custom broker property key, used to specify the configs that allow values less than or equal to a provided value. 
+     * If this property is not specified, a default of {@link #DEFAULT_LESS_THAN_OR_EQUAL_TO_CONFIG_SET} will be used in this class.
+     */
+    public static final String LESS_THAN_OR_EQUAL_TO_CONFIGS = ALTER_CONFIG_POLICY_PREFIX + "less.equal";
+
+    public static final Set<String> DEFAULT_CONFIG_WITH_ONE_VALUE_SET = Set.of(
             COMPRESSION_TYPE_CONFIG + ":producer",
             FILE_DELETE_DELAY_MS_CONFIG + ":60000",
             FLUSH_MESSAGES_INTERVAL_CONFIG + ":9223372036854775807",
@@ -39,18 +55,18 @@ public class ConfigRules {
     );
 
     public static final String DEFAULT_MAX_MESSAGE_BYTE_ALLOWED = "1048588";
-    public static final Set<String> DEFAULT_LESS_THAN_AND_EQUAL_TO_CONFIG_SET = Set.of(MAX_MESSAGE_BYTES_CONFIG + ":" + DEFAULT_MAX_MESSAGE_BYTE_ALLOWED);
+    public static final Set<String> DEFAULT_LESS_THAN_OR_EQUAL_TO_CONFIG_SET = Set.of(MAX_MESSAGE_BYTES_CONFIG + ":" + DEFAULT_MAX_MESSAGE_BYTE_ALLOWED);
 
-    public static final String DEFAULT_CONFIG_VALUE_CONFIGS = String.join(",", DEFAULT_CONFIG_WITH_DEFAULT_VALUE_SET);
+    public static final String DEFAULT_CONFIG_VALUE_CONFIGS = String.join(",", DEFAULT_CONFIG_WITH_ONE_VALUE_SET);
     public static final String DEFAULT_NOT_ALLOW_UPDATE_CONFIGS = String.join(",", DEFAULT_CONFIG_CANNOT_UPDATE_SET);
-    public static final String DEFAULT_LESS_THAN_AND_EQUAL_TO_CONFIGS = String.join(",", DEFAULT_LESS_THAN_AND_EQUAL_TO_CONFIG_SET);
+    public static final String DEFAULT_LESS_THAN_OR_EQUAL_TO_CONFIGS = String.join(",", DEFAULT_LESS_THAN_OR_EQUAL_TO_CONFIG_SET);
 
     public final Set<ConfigRule> CONFIG_RULES = new HashSet<>();
 
     public static final ConfigDef configDef = new ConfigDef()
-            .define(ALLOW_DEFAULT_CONFIG_VALUE_CONFIGS, ConfigDef.Type.STRING, DEFAULT_CONFIG_VALUE_CONFIGS, ConfigDef.Importance.MEDIUM, "Feature flag to allow enabling of partition limit enforcement")
+            .define(ALLOW_ONE_CONFIG_VALUE_CONFIGS, ConfigDef.Type.STRING, DEFAULT_CONFIG_VALUE_CONFIGS, ConfigDef.Importance.MEDIUM, "Feature flag to allow enabling of partition limit enforcement")
             .define(NOT_ALLOW_UPDATE_CONFIGS, ConfigDef.Type.STRING, DEFAULT_NOT_ALLOW_UPDATE_CONFIGS, ConfigDef.Importance.MEDIUM, "Max partitions")
-            .define(LESS_THAN_AND_EQUAL_TO_CONFIGS, ConfigDef.Type.STRING, DEFAULT_LESS_THAN_AND_EQUAL_TO_CONFIGS, ConfigDef.Importance.MEDIUM, "Internal Partition Prefix");
+            .define(LESS_THAN_OR_EQUAL_TO_CONFIGS, ConfigDef.Type.STRING, DEFAULT_LESS_THAN_OR_EQUAL_TO_CONFIGS, ConfigDef.Importance.MEDIUM, "Internal Partition Prefix");
 
     private Map<String, String> defaultValueConfigs;
     private Set<String> notAllowUpdateConfigs;
@@ -59,12 +75,12 @@ public class ConfigRules {
     public ConfigRules(Map<String, ?> configs) {
         AbstractConfig parsedConfig = new AbstractConfig(configDef, configs);
 
-        defaultValueConfigs = parseCsvMap(parsedConfig.getString(ALLOW_DEFAULT_CONFIG_VALUE_CONFIGS));
-        notAllowUpdateConfigs = parseCsvSet(parsedConfig.getString(NOT_ALLOW_UPDATE_CONFIGS));
-        lessThanAndEqualToConfigs = parseCsvMap(parsedConfig.getString(LESS_THAN_AND_EQUAL_TO_CONFIGS));
-        CONFIG_RULES.add(new DefaultConfigValueRule(defaultValueConfigs));
+        defaultValueConfigs = parseStrToMap(parsedConfig.getString(ALLOW_ONE_CONFIG_VALUE_CONFIGS));
+        notAllowUpdateConfigs = parseStrToSet(parsedConfig.getString(NOT_ALLOW_UPDATE_CONFIGS));
+        lessThanAndEqualToConfigs = parseStrToMap(parsedConfig.getString(LESS_THAN_OR_EQUAL_TO_CONFIGS));
+        CONFIG_RULES.add(new OneValueAllowedConfigRule(defaultValueConfigs));
         CONFIG_RULES.add(new NotAllowUpdateRule(notAllowUpdateConfigs));
-        CONFIG_RULES.add(new AllowLessThanAndEqualToRule(lessThanAndEqualToConfigs));
+        CONFIG_RULES.add(new AllowLessThanOrEqualToRule(lessThanAndEqualToConfigs));
     }
 
     public Map<String, String> getDefaultValueConfigs() {
@@ -87,11 +103,15 @@ public class ConfigRules {
 
     /**
      * This method gets comma separated values which contains key,value pairs and returns a map of
-     * key value pairs. the format of allCSVal is key1:val1, key2:val2 ....
-     * Also supports strings with multiple ":" such as IpV6 addresses, taking the last occurrence
-     * of the ":" in the pair as the split, eg a:b:c:val1, d:e:f:val2 => a:b:c -> val1, d:e:f -> val2
+     * key value pairs. the format of string is key1:val1,key2:val2 ....
+     *
+     * @param str the string with the format: key1:val1,key2:val2
+     * @return  the map with the {key1=val1, key2=val2}
      */
-    public Map<String, String> parseCsvMap(String str) {
+    public Map<String, String> parseStrToMap(String str) {
+        if (str == null || str.isEmpty())
+            return Collections.EMPTY_MAP;
+
         Map<String, String> map = new HashMap<>(str.length());
 
         Arrays.stream(str.split("\\s*,\\s*")).forEach(s -> {
@@ -101,16 +121,17 @@ public class ConfigRules {
         return map;
     }
 
-
-
     /**
-     * Parse a comma separated string into a sequence of strings.
+     * Parse a comma separated string into a sequence of strings. the format of string is val1,val2,....
      * Whitespace surrounding the comma will be removed.
+     *
+     * @param str the string with the format: val1,val2
+     * @return  the set with the {val1, val2}
      */
-    public Set<String> parseCsvSet(String csvList) {
-        if (csvList == null || csvList.isEmpty())
+    public Set<String> parseStrToSet(String str) {
+        if (str == null || str.isEmpty())
             return Collections.EMPTY_SET;
         else
-            return Arrays.stream(csvList.split("\\s*,\\s*")).filter(v -> !v.equals("")).collect(Collectors.toSet());
+            return Arrays.stream(str.split("\\s*,\\s*")).filter(v -> !v.equals("")).collect(Collectors.toSet());
     }
 }

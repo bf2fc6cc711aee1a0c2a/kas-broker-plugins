@@ -15,16 +15,16 @@ class ConfigRulesTest {
     void testGetDefaultRuleConfigs() {
         Map<String, ?> config = configWith(Map.of());
         ConfigRules configRules = new ConfigRules(config);
-        assertEquals(setToMap(ConfigRules.DEFAULT_CONFIG_WITH_DEFAULT_VALUE_SET), configRules.getDefaultValueConfigs());
+        assertEquals(setToMap(ConfigRules.DEFAULT_CONFIG_WITH_ONE_VALUE_SET), configRules.getDefaultValueConfigs());
         assertEquals(ConfigRules.DEFAULT_CONFIG_CANNOT_UPDATE_SET, configRules.getNotAllowUpdateConfigs());
-        assertEquals(setToMap(ConfigRules.DEFAULT_LESS_THAN_AND_EQUAL_TO_CONFIG_SET), configRules.getLessThanAndEqualToConfigs());
+        assertEquals(setToMap(ConfigRules.DEFAULT_LESS_THAN_OR_EQUAL_TO_CONFIG_SET), configRules.getLessThanAndEqualToConfigs());
     }
 
     @Test
     void testGetCustomRuleConfigs() {
         Map<String, ?> config = configWith(Map.of(
-                ConfigRules.ALLOW_DEFAULT_CONFIG_VALUE_CONFIGS, "min.compaction.lag.ms:0",
-                ConfigRules.LESS_THAN_AND_EQUAL_TO_CONFIGS, "retention.ms:604800000",
+                ConfigRules.ALLOW_ONE_CONFIG_VALUE_CONFIGS, "min.compaction.lag.ms:0",
+                ConfigRules.LESS_THAN_OR_EQUAL_TO_CONFIGS, "retention.ms:604800000",
                 ConfigRules.NOT_ALLOW_UPDATE_CONFIGS, "compression.type"));
 
         ConfigRules configRules = new ConfigRules(config);
@@ -36,8 +36,8 @@ class ConfigRulesTest {
     @Test
     void testGetDuplicatedCustomRuleConfigs() {
         Map<String, ?> config = configWith(Map.of(
-                ConfigRules.ALLOW_DEFAULT_CONFIG_VALUE_CONFIGS, "retention.ms:604800000",
-                ConfigRules.LESS_THAN_AND_EQUAL_TO_CONFIGS, "retention.ms:604800000"));
+                ConfigRules.ALLOW_ONE_CONFIG_VALUE_CONFIGS, "retention.ms:604800000",
+                ConfigRules.LESS_THAN_OR_EQUAL_TO_CONFIGS, "retention.ms:604800000"));
 
         ConfigRules configRules = new ConfigRules(config);
         assertEquals(Map.of("retention.ms", "604800000"), configRules.getDefaultValueConfigs());

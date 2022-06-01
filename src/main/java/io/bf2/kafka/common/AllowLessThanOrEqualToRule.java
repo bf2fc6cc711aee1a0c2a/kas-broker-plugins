@@ -3,17 +3,14 @@ package io.bf2.kafka.common;
 import org.apache.kafka.common.errors.PolicyViolationException;
 
 import java.util.Map;
-import java.util.Set;
-
-import static org.apache.kafka.common.config.TopicConfig.MAX_MESSAGE_BYTES_CONFIG;
 
 /**
- * This is a rule that only allow configs using default value
+ * This is a rule that allows values with less than or equal to a specific value
  */
-public class AllowLessThanAndEqualToRule implements ConfigRule {
+public class AllowLessThanOrEqualToRule implements ConfigRule {
     private final Map<String, String> lessThanAndEqualToConfigs;
 
-    public AllowLessThanAndEqualToRule(Map<String, String> lessThanAndEqualToConfigs) {
+    public AllowLessThanOrEqualToRule(Map<String, String> lessThanAndEqualToConfigs) {
         this.lessThanAndEqualToConfigs = lessThanAndEqualToConfigs;
     }
 

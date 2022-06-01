@@ -5,7 +5,6 @@ import io.bf2.kafka.common.LocalAdminClient;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.AlterConfigPolicy.RequestMetadata;
-import org.apache.kafka.server.policy.CreateTopicPolicy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,9 +14,6 @@ import org.mockito.Mockito;
 
 import java.util.Map;
 
-import static io.bf2.kafka.common.ConfigRules.DEFAULT_MAX_MESSAGE_BYTE_ALLOWED;
-import static io.bf2.kafka.common.ConfigRules.LEADER_REPLICATION_THROTTLED_REPLICAS_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.*;
 import static org.junit.Assert.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
@@ -29,7 +25,7 @@ class ManagedKafkaAlterConfigPolicyTest {
             LocalAdminClient.LISTENER_NAME, "controlplane",
             LocalAdminClient.LISTENER_PORT, "9090",
             LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT",
-            ConfigRules.ALLOW_DEFAULT_CONFIG_VALUE_CONFIGS, "compression.type:producer,unclean.leader.election.enable:false",
+            ConfigRules.ALLOW_ONE_CONFIG_VALUE_CONFIGS, "compression.type:producer,unclean.leader.election.enable:false",
             ConfigRules.NOT_ALLOW_UPDATE_CONFIGS, "message.format.version");
 
     @BeforeEach
@@ -98,13 +94,6 @@ class ManagedKafkaAlterConfigPolicyTest {
             assertThrows(PolicyViolationException.class, () -> policy.validate(r));
         }
     }
-
-//    @Test
-//    void testIsrSameAsDefault() {
-//        RequestMetadata r = buildRequest();
-//        Mockito.when(r.configs()).thenReturn(Map.of(MIN_IN_SYNC_REPLICAS_CONFIG, "2"));
-//        assertDoesNotThrow(() -> policy.validate(r));
-//    }
 
     private RequestMetadata buildRequest() {
         RequestMetadata r = Mockito.mock(RequestMetadata.class);

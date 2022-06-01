@@ -213,8 +213,8 @@ public class PartitionCounter implements AutoCloseable {
     }
 
     /**
-     * @return the value of the {@link #MAX_PARTITIONS} key in the broker configs, or a default of
-     *         {@link #DEFAULT_MAX_PARTITIONS} if not set.
+     * @return the value of the {@link #PRIVATE_TOPIC_PREFIX} key in the broker configs, or a default of
+     *         {@link #DEFAULT_PRIVATE_TOPIC_PREFIX} if not set.
      */
     public String getPrivateTopicPrefix() {
         return privateTopicPrefix;

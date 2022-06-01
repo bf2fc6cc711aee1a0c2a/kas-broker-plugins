@@ -5,10 +5,8 @@ import org.apache.kafka.common.errors.PolicyViolationException;
 import java.util.Map;
 import java.util.Set;
 
-import static org.apache.kafka.common.config.TopicConfig.*;
-
 /**
- * This is a rule that only allow configs using default value
+ * This is a rule that is not allowed to be updated
  */
 public class NotAllowUpdateRule implements ConfigRule {
     private final Set<String> notAllowUpdateConfigs;
