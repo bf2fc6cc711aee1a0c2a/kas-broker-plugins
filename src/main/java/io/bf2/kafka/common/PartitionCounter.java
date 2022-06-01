@@ -99,7 +99,7 @@ public class PartitionCounter implements AutoCloseable {
             .define(TIMEOUT_SECONDS, ConfigDef.Type.INT, DEFAULT_TIMEOUT_SECONDS,ConfigDef.Importance.MEDIUM, "Timeout duration for listing and describing topics")
             .define(SCHEDULE_INTERVAL_SECONDS, ConfigDef.Type.INT, DEFAULT_SCHEDULE_INTERVAL_SECONDS,ConfigDef.Importance.MEDIUM, "Schedule interval for scheduled counter");
 
-    private static final Logger log = LoggerFactory.getLogger(AclLoggingConfig.class);
+    private static final Logger log = LoggerFactory.getLogger(PartitionCounter.class);
 
     private static volatile PartitionCounter partitionCounter;
     private static final AtomicInteger handles = new AtomicInteger();

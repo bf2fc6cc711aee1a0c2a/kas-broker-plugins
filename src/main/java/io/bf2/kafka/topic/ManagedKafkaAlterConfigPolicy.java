@@ -17,15 +17,17 @@ import java.util.Map;
 import static io.bf2.kafka.common.PartitionCounter.PRIVATE_TOPIC_PREFIX;
 import static io.bf2.kafka.common.PartitionCounter.configDef;
 
-public class ManagedKafkaAlterTopicPolicy implements AlterConfigPolicy {
-    private static final Logger log = LoggerFactory.getLogger(ManagedKafkaAlterTopicPolicy.class);
+public class ManagedKafkaAlterConfigPolicy implements AlterConfigPolicy {
+    private static final Logger log = LoggerFactory.getLogger(ManagedKafkaAlterConfigPolicy.class);
 
     private volatile Map<String, ?> configs;
     private String privateTopicPrefix;
+    private ConfigRules configRules;
 
     @Override
     public void configure(Map<String, ?> configs) {
         this.configs = configs;
+        this.configRules = new ConfigRules(configs);
 
         AbstractConfig parsedConfig = new AbstractConfig(configDef, this.configs);
         this.privateTopicPrefix = parsedConfig.getString(PRIVATE_TOPIC_PREFIX);
@@ -46,9 +48,8 @@ public class ManagedKafkaAlterTopicPolicy implements AlterConfigPolicy {
 
     private void validateConfigs(RequestMetadata requestMetadata) throws PolicyViolationException {
         Map<String, String> configs = requestMetadata.configs();
-        if (!configs.isEmpty() && !ConfigRules.isValid(configs)) {
-            throw new PolicyViolationException(
-                    String.format("Topic %s configured with invalid configs: %d", requestMetadata.resource().name(), requestMetadata.configs()));
+        if (!configs.isEmpty()) {
+            configRules.validateTopicConfigs(requestMetadata.resource().name(), configs);
         }
     }
 }

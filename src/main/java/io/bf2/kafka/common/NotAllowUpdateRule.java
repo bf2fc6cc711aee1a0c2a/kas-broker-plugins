@@ -1,5 +1,7 @@
 package io.bf2.kafka.common;
 
+import org.apache.kafka.common.errors.PolicyViolationException;
+
 import java.util.Map;
 import java.util.Set;
 
@@ -8,23 +10,23 @@ import static org.apache.kafka.common.config.TopicConfig.*;
 /**
  * This is a rule that only allow configs using default value
  */
-public class NotAllowUpdateRule implements ConfigRule{
-    private static final String FOLLOWER_REPLICATION_THROTTLED_REPLICAS_CONFIG = "follower.replication.throttled.replicas";
-    private static final String LEADER_REPLICATION_THROTTLED_REPLICAS_CONFIG = "leader.replication.throttled.replicas";
-    private static final Set<String> CONFIG_CANNOT_UPDATE = Set.of(
-            MESSAGE_FORMAT_VERSION_CONFIG,
-            FOLLOWER_REPLICATION_THROTTLED_REPLICAS_CONFIG,
-            LEADER_REPLICATION_THROTTLED_REPLICAS_CONFIG
-    );
+public class NotAllowUpdateRule implements ConfigRule {
+    private final Set<String> notAllowUpdateConfigs;
+
+    public NotAllowUpdateRule(Set<String> notAllowUpdateConfigs) {
+        this.notAllowUpdateConfigs = notAllowUpdateConfigs;
+    }
 
 
     @Override
-    public boolean IsValid(Map<String, String> configs) {
-        for (String key : configs.keySet()) {
-            if (CONFIG_CANNOT_UPDATE.contains(key)) {
-                return false;
+    public void validate(String topic, Map<String, String> configs) {
+        for (Map.Entry<String, String> entry : configs.entrySet()) {
+            String key = entry.getKey();
+            if (notAllowUpdateConfigs.contains(key)) {
+                throw new PolicyViolationException(
+                        String.format("Topic %s configured with invalid configs: %s:%s. This config cannot be updated."
+                                , topic, key, entry.getValue()));
             }
         }
-        return true;
     }
 }
