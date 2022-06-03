@@ -66,7 +66,7 @@ public class PartitionCounter implements AutoCloseable {
     /**
      * Custom broker property key, used to specify the topic prefix to match for private/internal topics
      * in the {@link #countExistingPartitions()} method, where partitions from those topics will not be
-     * counted. If this property is not specified, a default of {@link #DEFAULT_PRIVATE_TOPIC_PREFIX}
+     * counted. If this property is not specified, a default of {@link #DEFAULT_NO_PRIVATE_TOPIC_PREFIX}
      * will be used in this class.
      */
     public static final String PRIVATE_TOPIC_PREFIX = CREATE_TOPIC_POLICY_PREFIX + "partition-counter.private-topic-prefix";
@@ -88,7 +88,7 @@ public class PartitionCounter implements AutoCloseable {
     static final int DEFAULT_MAX_PARTITIONS = -1;
     static final int DEFAULT_TIMEOUT_SECONDS = 10;
     static final int DEFAULT_SCHEDULE_INTERVAL_SECONDS = 15;
-    static final String DEFAULT_PRIVATE_TOPIC_PREFIX = "__redhat_";
+    static final String DEFAULT_NO_PRIVATE_TOPIC_PREFIX = "";
     static final boolean DEFAULT_LIMIT_ENFORCED = false;
 
     private static final String GROUP_METADATA_TOPIC_NAME = "__consumer_offsets";
@@ -97,7 +97,7 @@ public class PartitionCounter implements AutoCloseable {
     private static final ConfigDef configDef = new ConfigDef()
             .define(LIMIT_ENFORCED, ConfigDef.Type.BOOLEAN, DEFAULT_LIMIT_ENFORCED, ConfigDef.Importance.MEDIUM, "Feature flag to allow enabling of partition limit enforcement")
             .define(MAX_PARTITIONS, ConfigDef.Type.INT, DEFAULT_MAX_PARTITIONS, ConfigDef.Importance.MEDIUM, "Max partitions")
-            .define(PRIVATE_TOPIC_PREFIX, ConfigDef.Type.STRING, DEFAULT_PRIVATE_TOPIC_PREFIX, ConfigDef.Importance.MEDIUM, "Internal Partition Prefix")
+            .define(PRIVATE_TOPIC_PREFIX, ConfigDef.Type.STRING, DEFAULT_NO_PRIVATE_TOPIC_PREFIX, ConfigDef.Importance.MEDIUM, "Internal Partition Prefix")
             .define(TIMEOUT_SECONDS, ConfigDef.Type.INT, DEFAULT_TIMEOUT_SECONDS,ConfigDef.Importance.MEDIUM, "Timeout duration for listing and describing topics")
             .define(SCHEDULE_INTERVAL_SECONDS, ConfigDef.Type.INT, DEFAULT_SCHEDULE_INTERVAL_SECONDS,ConfigDef.Importance.MEDIUM, "Schedule interval for scheduled counter");
 

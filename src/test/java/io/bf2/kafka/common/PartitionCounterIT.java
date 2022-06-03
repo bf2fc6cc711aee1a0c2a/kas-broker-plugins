@@ -30,11 +30,13 @@ class PartitionCounterIT {
         void testOnlyCountPublicTopicPartitions(KafkaHelper kafkaHelper)
                 throws InterruptedException, ExecutionException, TimeoutException {
             try (Admin admin = Admin.create(kafkaHelper.consumerConfig())) {
-                final int PUBLIC_PARTITION_COUNT = 20;
+                final int PUBLIC_PARTITION_COUNT = 30;
+                final String customPrivateTopicPrefix = "__kas_";
                 List<NewTopic> newTopics = List.of(
-                        new NewTopic("topic1", PUBLIC_PARTITION_COUNT / 2, (short) 1),
-                        new NewTopic("topic2", PUBLIC_PARTITION_COUNT / 2, (short) 1),
-                        new NewTopic(PartitionCounter.DEFAULT_PRIVATE_TOPIC_PREFIX + "topic", 11, (short) 1),
+                        new NewTopic("topic1", PUBLIC_PARTITION_COUNT / 3, (short) 1),
+                        new NewTopic("topic2", PUBLIC_PARTITION_COUNT / 3, (short) 1),
+                        new NewTopic(PartitionCounter.DEFAULT_NO_PRIVATE_TOPIC_PREFIX + "topic", PUBLIC_PARTITION_COUNT / 3, (short) 1),
+                        new NewTopic(customPrivateTopicPrefix + "topic", 11, (short) 1),
                         new NewTopic("__consumer_offsets", 12, (short) 1),
                         new NewTopic("__transaction_state", 13, (short) 1));
                 CreateTopicsResult result = admin.createTopics(newTopics);
@@ -43,6 +45,7 @@ class PartitionCounterIT {
                 Map<String, Object> config = Stream.concat(
                         kafkaHelper.consumerConfig().entrySet().stream(),
                         Map.of(
+                                PartitionCounter.PRIVATE_TOPIC_PREFIX, "__kas_",
                                 LocalAdminClient.LISTENER_NAME, "test",
                                 LocalAdminClient.LISTENER_PORT, kafkaHelper.kafkaPort(),
                                 LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT").entrySet().stream())
