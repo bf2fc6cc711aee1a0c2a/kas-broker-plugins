@@ -1,6 +1,10 @@
-# Kafka-Group-Authorizer
+# kas-broker-plugins
 
-A authorizer for Strimzi Kafka Operator that can configure ACLs for all users of the cluster with single ACL policy.
+An authorizer for [Apache Kafka®](https://kafka.apache.org/) that can configure ACLs for all users of the cluster with single ACL policy.
+
+*Disclaimer:*
+KAFKA is a registered trademark of The Apache Software Foundation and has been licensed for use by kas-broker-plugins.
+kas-broker-plugins has no affiliation with and is not endorsed by The Apache Software Foundation.
 
 The objective is to use this Authorizer with Strimzi Operator when User Operator is not being used to configure a custom Authorizer that can apply to all the users in the kafka cluster. There is provision to configure `superUser` to allow any administrative work.
 
@@ -33,7 +37,7 @@ resource-type values are “topic”, “group”, “cluster”, “transaction
 
 “operations” is a comma separated list of operations this rule either allows or denies. The supported values are “all”, “read”, “write”, “create”, “delete”, “alter”, “describe”, “cluster_action”, “describe_configs”, “alter_configs” and “idempotent_write”.
 
-NOTE: All enum properties above match exactly to the enums defined in Kafka Java libraries.
+NOTE: All enum properties above match exactly to the enums defined in the Apache Kafka® Java libraries.
 
 The ACL permissions will be evaluated in the order they are defined, when a rule matches Authorizer will return that rule’s evaluation as a decision. When no rules match, then by default it is denied. So, if ACL is not defined for a resource type then it is automatically gets denied.
 

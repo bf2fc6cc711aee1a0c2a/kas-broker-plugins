@@ -77,7 +77,7 @@ class CustomAclAuthorizerIT {
 
         configuration.parse(new String[] {
                 String.valueOf(zkPort),
-                Files.createTempDirectory("group-authorizer").toString()
+                Files.createTempDirectory("kas-broker-plugins").toString()
         });
 
         zkThread = new Thread() {
