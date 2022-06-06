@@ -1,7 +1,7 @@
 /*
  * License: Apache License 2.0 (see the file LICENSE or http://apache.org/licenses/LICENSE-2.0.html).
  */
-package io.bf2.kafka.topic;
+package io.bf2.kafka.config;
 
 import io.bf2.kafka.common.ConfigRules;
 import io.bf2.kafka.common.PartitionCounter;
@@ -20,7 +20,7 @@ import static io.bf2.kafka.common.PartitionCounter.configDef;
 public class ManagedKafkaAlterConfigPolicy implements AlterConfigPolicy {
     private static final Logger log = LoggerFactory.getLogger(ManagedKafkaAlterConfigPolicy.class);
 
-    private volatile Map<String, ?> configs;
+    private Map<String, ?> configs;
     private String privateTopicPrefix;
     private ConfigRules configRules;
 
@@ -38,6 +38,7 @@ public class ManagedKafkaAlterConfigPolicy implements AlterConfigPolicy {
 
     @Override
     public void validate(RequestMetadata requestMetadata) throws PolicyViolationException {
+        // currently, we only validate "external" TOPIC resources
         if (requestMetadata.resource().type() != ConfigResource.Type.TOPIC ||
                 (requestMetadata.resource().type() == ConfigResource.Type.TOPIC && PartitionCounter.isInternalTopic(requestMetadata.resource().name(), privateTopicPrefix))) {
             return;

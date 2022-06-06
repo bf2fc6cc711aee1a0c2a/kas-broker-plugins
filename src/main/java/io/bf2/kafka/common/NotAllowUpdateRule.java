@@ -1,12 +1,12 @@
 package io.bf2.kafka.common;
 
-import org.apache.kafka.common.errors.PolicyViolationException;
-
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * This is a rule that is not allowed to be updated
+ * This is a rule that doesn't allow the config value to be updated
  */
 public class NotAllowUpdateRule implements ConfigRule {
     private final Set<String> notAllowUpdateConfigs;
@@ -17,14 +17,14 @@ public class NotAllowUpdateRule implements ConfigRule {
 
 
     @Override
-    public void validate(String topic, Map<String, String> configs) {
+    public List<InvalidConfig> validate(String topic, Map<String, String> configs) {
+        List<InvalidConfig> invalidConfigs = new ArrayList<>();
         for (Map.Entry<String, String> entry : configs.entrySet()) {
             String key = entry.getKey();
             if (notAllowUpdateConfigs.contains(key)) {
-                throw new PolicyViolationException(
-                        String.format("Topic %s configured with invalid configs: %s:%s. This config cannot be updated."
-                                , topic, key, entry.getValue()));
+                invalidConfigs.add(new InvalidConfig(key, entry.getValue(), InvalidConfig.RuleType.NOT_ALLOW_UPDATE_RULE));
             }
         }
+        return invalidConfigs;
     }
 }

@@ -34,7 +34,7 @@ class ManagedKafkaCreateTopicPolicyTest {
             LocalAdminClient.LISTENER_NAME, "controlplane",
             LocalAdminClient.LISTENER_PORT, "9090",
             LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT",
-            ConfigRules.ALLOW_ONE_CONFIG_VALUE_CONFIGS, "compression.type:producer,unclean.leader.election.enable:false",
+            ConfigRules.ENFORCED_VALUE_CONFIGS, "compression.type:producer,unclean.leader.election.enable:false",
             ConfigRules.NOT_ALLOW_UPDATE_CONFIGS, "message.format.version");
 
     @BeforeEach
@@ -95,7 +95,7 @@ class ManagedKafkaCreateTopicPolicyTest {
             "max.message.bytes, 0, true",
             "max.message.bytes, 1048589, false"
     })
-    void testLessThanAndEqualToConfigValueRules(String configKey, String configVal, boolean isValid) {
+    void testLessThanOrEqualConfigValueRules(String configKey, String configVal, boolean isValid) {
         RequestMetadata r = buildRequest();
         Mockito.when(r.configs()).thenReturn(Map.of(configKey, configVal));
         if (isValid) {

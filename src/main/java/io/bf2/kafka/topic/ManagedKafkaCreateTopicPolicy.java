@@ -5,6 +5,7 @@ package io.bf2.kafka.topic;
 
 import io.bf2.kafka.common.PartitionCounter;
 import io.bf2.kafka.common.ConfigRules;
+import kafka.server.KafkaConfig;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy;
 import org.slf4j.Logger;
@@ -18,7 +19,7 @@ import java.util.concurrent.TimeoutException;
 import static org.apache.kafka.common.config.TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG;
 
 public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
-    protected static final String DEFAULT_REPLICATION_FACTOR = "default.replication.factor";
+    protected static final String DEFAULT_REPLICATION_FACTOR = KafkaConfig.DefaultReplicationFactorProp();
 
     private static final Logger log = LoggerFactory.getLogger(ManagedKafkaCreateTopicPolicy.class);
 

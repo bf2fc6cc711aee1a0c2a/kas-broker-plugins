@@ -4,7 +4,6 @@
 package io.bf2.kafka.common;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.bf2.kafka.authorizer.AclLoggingConfig;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.TopicListing;
 import org.apache.kafka.common.config.AbstractConfig;

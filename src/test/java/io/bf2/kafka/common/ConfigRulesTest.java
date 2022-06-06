@@ -6,7 +6,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-import static org.junit.Assert.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ConfigRulesTest {
@@ -15,33 +14,33 @@ class ConfigRulesTest {
     void testGetDefaultRuleConfigs() {
         Map<String, ?> config = configWith(Map.of());
         ConfigRules configRules = new ConfigRules(config);
-        assertEquals(setToMap(ConfigRules.DEFAULT_CONFIG_WITH_ONE_VALUE_SET), configRules.getDefaultValueConfigs());
+        assertEquals(convertSetToMap(ConfigRules.DEFAULT_ENFORCED_VALUE_SET), configRules.getDefaultValueConfigs());
         assertEquals(ConfigRules.DEFAULT_CONFIG_CANNOT_UPDATE_SET, configRules.getNotAllowUpdateConfigs());
-        assertEquals(setToMap(ConfigRules.DEFAULT_LESS_THAN_OR_EQUAL_TO_CONFIG_SET), configRules.getLessThanAndEqualToConfigs());
+        assertEquals(convertSetToMap(ConfigRules.DEFAULT_LESS_THAN_OR_EQUAL_TO_CONFIG_SET), configRules.getLessThanOrEqualConfigs());
     }
 
     @Test
     void testGetCustomRuleConfigs() {
         Map<String, ?> config = configWith(Map.of(
-                ConfigRules.ALLOW_ONE_CONFIG_VALUE_CONFIGS, "min.compaction.lag.ms:0",
+                ConfigRules.ENFORCED_VALUE_CONFIGS, "min.compaction.lag.ms:0",
                 ConfigRules.LESS_THAN_OR_EQUAL_TO_CONFIGS, "retention.ms:604800000",
                 ConfigRules.NOT_ALLOW_UPDATE_CONFIGS, "compression.type"));
 
         ConfigRules configRules = new ConfigRules(config);
         assertEquals(Map.of("min.compaction.lag.ms", "0"), configRules.getDefaultValueConfigs());
         assertEquals(Set.of("compression.type"), configRules.getNotAllowUpdateConfigs());
-        assertEquals(Map.of("retention.ms", "604800000"), configRules.getLessThanAndEqualToConfigs());
+        assertEquals(Map.of("retention.ms", "604800000"), configRules.getLessThanOrEqualConfigs());
     }
 
     @Test
     void testGetDuplicatedCustomRuleConfigs() {
         Map<String, ?> config = configWith(Map.of(
-                ConfigRules.ALLOW_ONE_CONFIG_VALUE_CONFIGS, "retention.ms:604800000",
+                ConfigRules.ENFORCED_VALUE_CONFIGS, "retention.ms:604800000",
                 ConfigRules.LESS_THAN_OR_EQUAL_TO_CONFIGS, "retention.ms:604800000"));
 
         ConfigRules configRules = new ConfigRules(config);
         assertEquals(Map.of("retention.ms", "604800000"), configRules.getDefaultValueConfigs());
-        assertEquals(Map.of("retention.ms", "604800000"), configRules.getLessThanAndEqualToConfigs());
+        assertEquals(Map.of("retention.ms", "604800000"), configRules.getDefaultValueConfigs());
     }
 
     private Map<String, ?> configWith(Map<String, ?> customEntries) {
@@ -56,7 +55,7 @@ class ConfigRulesTest {
         return result;
     }
 
-    private Map<String, String> setToMap(Set<String> set) {
+    private Map<String, String> convertSetToMap(Set<String> set) {
         Map<String, String> result = new HashMap<>();
         set.forEach(s -> {
             int delimiter = s.lastIndexOf(":");
