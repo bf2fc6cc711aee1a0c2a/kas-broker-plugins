@@ -1,17 +1,38 @@
 package io.bf2.kafka.common;
 
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Range;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.errors.PolicyViolationException;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import static org.apache.kafka.common.config.TopicConfig.*;
+import static io.bf2.kafka.common.Utils.parseListToMap;
+import static io.bf2.kafka.common.Utils.parseListToRangeMap;
+import static org.apache.kafka.common.config.TopicConfig.CLEANUP_POLICY_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.COMPRESSION_TYPE_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.DELETE_RETENTION_MS_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.FILE_DELETE_DELAY_MS_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.FLUSH_MESSAGES_INTERVAL_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.FLUSH_MS_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.INDEX_INTERVAL_BYTES_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.MAX_COMPACTION_LAG_MS_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.MAX_MESSAGE_BYTES_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.MESSAGE_DOWNCONVERSION_ENABLE_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.MESSAGE_TIMESTAMP_TYPE_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.MIN_CLEANABLE_DIRTY_RATIO_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.MIN_COMPACTION_LAG_MS_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.PREALLOCATE_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.RETENTION_BYTES_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.RETENTION_MS_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.SEGMENT_BYTES_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.SEGMENT_INDEX_BYTES_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.SEGMENT_JITTER_MS_CONFIG;
+import static org.apache.kafka.common.config.TopicConfig.SEGMENT_MS_CONFIG;
 import static org.apache.kafka.common.config.TopicConfig.UNCLEAN_LEADER_ELECTION_ENABLE_CONFIG;
 
 /**
@@ -24,19 +45,28 @@ public class ConfigRules {
      * Custom broker property key, used to specify the configs with permitted value. It's a list in the form [keyA]:[valueA],[keyB]:[valueB].
      * If this property is not specified, a default of {@link #DEFAULT_ENFORCED_VALUE_SET} will be used in this class.
      */
-    public static final String ENFORCED_VALUE_CONFIGS = ALTER_CONFIG_POLICY_PREFIX + "one.value";
+    public static final String ENFORCED_VALUE_CONFIGS = ALTER_CONFIG_POLICY_PREFIX + "enforced";
 
     /**
-     * Custom broker property key, used to specify the configs that cannot be updated. It's a comma separated list.
-     * If this property is not specified, a default of {@link #DEFAULT_CONFIG_CANNOT_UPDATE_SET} will be used in this class.
+     * Custom broker property key, used to specify the configs that allow to be updated. It's a comma separated list.
+     * If this property is not specified, a default of {@link #DEFAULT_MUTABLE_CONFIG_KEYS} will be used in this class.
      */
-    public static final String NOT_ALLOW_UPDATE_CONFIGS = ALTER_CONFIG_POLICY_PREFIX + "no.update";
+    public static final String MUTABLE_CONFIGS = ALTER_CONFIG_POLICY_PREFIX + "mutable";
 
     /**
-     * Custom broker property key, used to specify the configs that allow values less than or equal to a provided value. 
-     * If this property is not specified, a default of {@link #DEFAULT_LESS_THAN_OR_EQUAL_TO_CONFIG_SET} will be used in this class.
+     * Custom broker property key, used to specify the configs that allow values within a range with the format "configA:minA:maxA,configB:minB:maxB,...".
+     * <p>
+     * For example, if we want to set:
+     *   1. configA value as 4 <= value <= 10
+     *   2. configB value as 4 <= value
+     *   3. configC value as value <= 0.8
+     *
+     * So, we should set the range config as: "configA:4:10,configB:4:,configC::0.8
+     * <p>
+     * If this property is not specified, a default of {@link #DEFAULT_RANGE_CONFIGS} will be used in this class.
      */
-    public static final String LESS_THAN_OR_EQUAL_TO_CONFIGS = ALTER_CONFIG_POLICY_PREFIX + "less.equal";
+    public static final String RANGE_CONFIGS = ALTER_CONFIG_POLICY_PREFIX + "range";
+    public static final String RANGE_CONFIGS_DOC = "This is used to specify the configs that allow values within a range with the format 'configA:minA:maxA,configB:minB:maxB,....'.";
 
     public static final Set<String> DEFAULT_ENFORCED_VALUE_SET = Set.of(
             COMPRESSION_TYPE_CONFIG + ":producer",
@@ -50,86 +80,94 @@ public class ConfigRules {
             UNCLEAN_LEADER_ELECTION_ENABLE_CONFIG + ":false"
     );
 
-    public static final String FOLLOWER_REPLICATION_THROTTLED_REPLICAS_CONFIG = "follower.replication.throttled.replicas";
-    public static final String LEADER_REPLICATION_THROTTLED_REPLICAS_CONFIG = "leader.replication.throttled.replicas";
-    public static final Set<String> DEFAULT_CONFIG_CANNOT_UPDATE_SET = Set.of(
-            MESSAGE_FORMAT_VERSION_CONFIG,
-            FOLLOWER_REPLICATION_THROTTLED_REPLICAS_CONFIG,
-            LEADER_REPLICATION_THROTTLED_REPLICAS_CONFIG,
-            MIN_IN_SYNC_REPLICAS_CONFIG
+    public static final Set<String> DEFAULT_MUTABLE_CONFIG_KEYS = Set.of(
+            CLEANUP_POLICY_CONFIG,
+            COMPRESSION_TYPE_CONFIG,
+            DELETE_RETENTION_MS_CONFIG,
+            FILE_DELETE_DELAY_MS_CONFIG,
+            FLUSH_MESSAGES_INTERVAL_CONFIG,
+            FLUSH_MS_CONFIG,
+            INDEX_INTERVAL_BYTES_CONFIG,
+            MAX_COMPACTION_LAG_MS_CONFIG,
+            MAX_MESSAGE_BYTES_CONFIG,
+            MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS_CONFIG,
+            MESSAGE_TIMESTAMP_TYPE_CONFIG,
+            MIN_CLEANABLE_DIRTY_RATIO_CONFIG,
+            MIN_COMPACTION_LAG_MS_CONFIG,
+            PREALLOCATE_CONFIG,
+            RETENTION_BYTES_CONFIG,
+            RETENTION_MS_CONFIG,
+            SEGMENT_BYTES_CONFIG,
+            SEGMENT_INDEX_BYTES_CONFIG,
+            SEGMENT_JITTER_MS_CONFIG,
+            SEGMENT_MS_CONFIG,
+            UNCLEAN_LEADER_ELECTION_ENABLE_CONFIG,
+            MESSAGE_DOWNCONVERSION_ENABLE_CONFIG
     );
 
-    public static final String DEFAULT_MAX_MESSAGE_BYTE_ALLOWED = "1048588";
-    public static final Set<String> DEFAULT_LESS_THAN_OR_EQUAL_TO_CONFIG_SET = Set.of(MAX_MESSAGE_BYTES_CONFIG + ":" + DEFAULT_MAX_MESSAGE_BYTE_ALLOWED);
+    public static final String DEFAULT_MAX_MESSAGE_BYTES= "1048588";
+    public static final String DEFAULT_MIN_SEGMENT_BYTES = "52428800";
+    public static final Set<String> DEFAULT_RANGE_CONFIG_SET = Set.of(
+            String.format("%s::%s", MAX_MESSAGE_BYTES_CONFIG, DEFAULT_MAX_MESSAGE_BYTES),
+            String.format("%s:%s:", SEGMENT_BYTES_CONFIG, DEFAULT_MIN_SEGMENT_BYTES));
 
     public static final String DEFAULT_CONFIG_VALUE_CONFIGS = String.join(",", DEFAULT_ENFORCED_VALUE_SET);
-    public static final String DEFAULT_NOT_ALLOW_UPDATE_CONFIGS = String.join(",", DEFAULT_CONFIG_CANNOT_UPDATE_SET);
-    public static final String DEFAULT_LESS_THAN_OR_EQUAL_TO_CONFIGS = String.join(",", DEFAULT_LESS_THAN_OR_EQUAL_TO_CONFIG_SET);
+    public static final String DEFAULT_IMMUTABLE_CONFIGS = String.join(",", DEFAULT_MUTABLE_CONFIG_KEYS);
+    public static final String DEFAULT_RANGE_CONFIGS = String.join(",", DEFAULT_RANGE_CONFIG_SET);
 
     public final Set<ConfigRule> configRules;
 
     public static final ConfigDef configDef = new ConfigDef()
             .define(ENFORCED_VALUE_CONFIGS, ConfigDef.Type.LIST, DEFAULT_CONFIG_VALUE_CONFIGS, ConfigDef.Importance.MEDIUM, "This is used to specify the configs with permitted value. It's a list in the form [keyA]:[valueA],[keyB]:[valueB]")
-            .define(NOT_ALLOW_UPDATE_CONFIGS, ConfigDef.Type.LIST, DEFAULT_NOT_ALLOW_UPDATE_CONFIGS, ConfigDef.Importance.MEDIUM, "This is used to specify the configs that cannot be updated. It's a comma separated list.")
-            .define(LESS_THAN_OR_EQUAL_TO_CONFIGS, ConfigDef.Type.LIST, DEFAULT_LESS_THAN_OR_EQUAL_TO_CONFIGS, ConfigDef.Importance.MEDIUM, "This is used to specify the configs that allow values less than or equal to a provided value.");
+            .define(MUTABLE_CONFIGS, ConfigDef.Type.LIST, DEFAULT_IMMUTABLE_CONFIGS, ConfigDef.Importance.MEDIUM, "This is used to specify the configs that allow to be updated. It's a comma separated list.")
+            .define(RANGE_CONFIGS, ConfigDef.Type.LIST, DEFAULT_RANGE_CONFIGS, ConfigDef.Importance.MEDIUM, RANGE_CONFIGS_DOC);
 
-    private Map<String, String> defaultValueConfigs;
-    private Set<String> notAllowUpdateConfigs;
-    private Map<String, String> lessThanOrEqualConfigs;
+    private Map<String, String> enforcedConfigs;
+    private Set<String> mutableConfigs;
+    private Map<String, Range> rangeConfigs;
 
     public ConfigRules(Map<String, ?> configs) {
         AbstractConfig parsedConfig = new AbstractConfig(configDef, configs);
 
-        defaultValueConfigs = parseListToMap(parsedConfig.getList(ENFORCED_VALUE_CONFIGS));
-        notAllowUpdateConfigs = Set.copyOf(parsedConfig.getList(NOT_ALLOW_UPDATE_CONFIGS));
-        lessThanOrEqualConfigs = parseListToMap(parsedConfig.getList(LESS_THAN_OR_EQUAL_TO_CONFIGS));
+        enforcedConfigs = parseListToMap(parsedConfig.getList(ENFORCED_VALUE_CONFIGS));
+        rangeConfigs = parseListToRangeMap(parsedConfig.getList(RANGE_CONFIGS));
+
+        // mutable configs should be the union of all config keys
+        mutableConfigs = ImmutableSet.<String>builder()
+                .addAll(Set.copyOf(parsedConfig.getList(MUTABLE_CONFIGS)))
+                .addAll(enforcedConfigs.keySet())
+                .addAll(rangeConfigs.keySet())
+                .build();
+
         configRules = Set.of(
-                new EnforcedValueRule(defaultValueConfigs),
-                new NotAllowUpdateRule(notAllowUpdateConfigs),
-                new AllowLessThanOrEqualRule(lessThanOrEqualConfigs));
+                new EnforcedValueRule(enforcedConfigs),
+                new ImmutableRule(mutableConfigs),
+                new RangeRule(rangeConfigs));
     }
 
-    public Map<String, String> getDefaultValueConfigs() {
-        return defaultValueConfigs;
+    public Map<String, String> getEnforcedConfigs() {
+        return enforcedConfigs;
     }
 
-    public Map<String, String> getLessThanOrEqualConfigs() {
-        return lessThanOrEqualConfigs;
+    public Map<String, Range> getRangeConfigs() {
+        return rangeConfigs;
     }
 
-    public Set<String> getNotAllowUpdateConfigs() {
-        return notAllowUpdateConfigs;
+    public Set<String> getMutableConfigs() {
+        return mutableConfigs;
     }
 
     public void validateTopicConfigs(String topic, Map<String, String> configs) {
-        List<InvalidConfig> invalidConfigs = new ArrayList<>();
-        for (ConfigRule rule : configRules) {
-            invalidConfigs.addAll(rule.validate(topic, configs));
+        Set<InvalidConfig> invalidConfigs = new HashSet<>();
+        for (Map.Entry<String, String> entry: configs.entrySet()) {
+            for (ConfigRule rule : configRules) {
+                rule.validate(entry.getKey(), entry.getValue()).ifPresent((invalidConfigs::add));
+            }
         }
 
         if (!invalidConfigs.isEmpty()) {
             throw new PolicyViolationException(
                     String.format("Invalid config specified for topic %s. The violated configs are: %s", topic, invalidConfigs));
         }
-    }
-
-    /**
-     * This method gets comma separated values which contains key,value pairs and returns a map of
-     * key value pairs. the format of string is key1:val1,key2:val2 ....
-     *
-     * @param list the list with the format: key1:val1,key2:val2
-     * @return  the unmodifiable map with the {key1=val1, key2=val2}
-     */
-    private Map<String, String> parseListToMap(List<String> list) {
-        if (list == null || list.isEmpty())
-            return Collections.emptyMap();
-
-        Map<String, String> map = new HashMap<>(list.size());
-
-        list.stream().forEach(s -> {
-            int delimiter = s.lastIndexOf(":");
-            map.put(s.substring(0, delimiter).trim(), s.substring(delimiter + 1).trim());
-        });
-        return Map.copyOf(map);
     }
 }
