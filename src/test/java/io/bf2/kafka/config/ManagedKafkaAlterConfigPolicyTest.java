@@ -2,7 +2,6 @@ package io.bf2.kafka.config;
 
 import io.bf2.kafka.common.ConfigRules;
 import io.bf2.kafka.common.LocalAdminClient;
-import io.bf2.kafka.config.ManagedKafkaAlterConfigPolicy;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.AlterConfigPolicy.RequestMetadata;
@@ -15,6 +14,7 @@ import org.mockito.Mockito;
 
 import java.util.Map;
 
+import static io.bf2.kafka.common.ConfigRules.DEFAULT_RANGE_CONFIGS;
 import static org.junit.Assert.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
@@ -27,7 +27,8 @@ class ManagedKafkaAlterConfigPolicyTest {
             LocalAdminClient.LISTENER_PORT, "9090",
             LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT",
             ConfigRules.ENFORCED_VALUE_CONFIGS, "compression.type:producer,unclean.leader.election.enable:false",
-            ConfigRules.NOT_ALLOW_UPDATE_CONFIGS, "message.format.version");
+            ConfigRules.MUTABLE_CONFIGS, "retention.ms,max.message.bytes,segment.bytes",
+            ConfigRules.RANGE_CONFIGS, DEFAULT_RANGE_CONFIGS + ",min.cleanable.dirty.ratio:0.5:0.6");
 
     @BeforeEach
     void setup() {
@@ -58,7 +59,7 @@ class ManagedKafkaAlterConfigPolicyTest {
             "unclean.leader.election.enable, false, true",
             "unclean.leader.election.enable, true, false",
     })
-    void testDefaultConfigValueRules(String configKey, String configVal, boolean isValid) {
+    void testEnforcedValueRules(String configKey, String configVal, boolean isValid) {
         RequestMetadata r = buildRequest();
         Mockito.when(r.configs()).thenReturn(Map.of(configKey, configVal));
         if (isValid) {
@@ -71,22 +72,36 @@ class ManagedKafkaAlterConfigPolicyTest {
     @ParameterizedTest
     @CsvSource({
             // the following config cannot be updated
-            "message.format.version"
+            "retention.ms, true",
+            "message.format.version, false"
     })
-    void testNotAllowUpdateConfigValueRules(String configKey) {
+    void testImmutableRules(String configKey, boolean isValid) {
         RequestMetadata r = buildRequest();
         Mockito.when(r.configs()).thenReturn(Map.of(configKey, "Doesn't matter"));
-        assertThrows(PolicyViolationException.class, () -> policy.validate(r));
+        if (isValid) {
+            assertDoesNotThrow(() -> policy.validate(r));
+        } else {
+            assertThrows(PolicyViolationException.class, () -> policy.validate(r));
+        }
     }
 
     @ParameterizedTest
     @CsvSource({
-            // max.message.bytes only allows value less than or equal to 1048588
+            // max.message.bytes allows value less than or equal to 1048588
             "max.message.bytes, 1048588, true",
             "max.message.bytes, 0, true",
-            "max.message.bytes, 1048589, false"
+            "max.message.bytes, 1048589, false",
+            // max.message.bytes allows value greater than or equal to 52428800
+            "segment.bytes, 52428800, true",
+            "segment.bytes, 52428801, true",
+            "segment.bytes, 0, false",
+            // max.message.bytes allows value between 0.5 and 0.6
+            "min.cleanable.dirty.ratio, 0.6, true",
+            "min.cleanable.dirty.ratio, 0.5, true",
+            "min.cleanable.dirty.ratio, 0.4, false",
+            "min.cleanable.dirty.ratio, 0.7, false",
     })
-    void testLessThanOrEqualConfigValueRules(String configKey, String configVal, boolean isValid) {
+    void testRangeRules(String configKey, String configVal, boolean isValid) {
         RequestMetadata r = buildRequest();
         Mockito.when(r.configs()).thenReturn(Map.of(configKey, configVal));
         if (isValid) {

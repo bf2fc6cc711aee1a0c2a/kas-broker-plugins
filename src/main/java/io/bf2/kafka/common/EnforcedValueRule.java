@@ -1,8 +1,7 @@
 package io.bf2.kafka.common;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * This is a rule that only allows configs using the provided value
@@ -15,18 +14,13 @@ public class EnforcedValueRule implements ConfigRule {
     }
 
     @Override
-    public List<InvalidConfig> validate(String topic, Map<String, String> configs) {
-        List<InvalidConfig> invalidConfigs = new ArrayList<>();
-        for (Map.Entry<String, String> entry : configs.entrySet()) {
-            String key = entry.getKey();
-            if (configWithDefaultValue.containsKey(key)) {
-                String defaultVal = configWithDefaultValue.get(key);
-                String val = entry.getValue();
-                if (!val.equals(defaultVal)) {
-                    invalidConfigs.add(new InvalidConfig(key, val, defaultVal, InvalidConfig.RuleType.ENFORCED_VALUE_RULE));
-                }
+    public Optional<InvalidConfig> validate(String key, String val) {
+        if (configWithDefaultValue.containsKey(key)) {
+            String defaultVal = configWithDefaultValue.get(key);
+            if (!val.equals(defaultVal)) {
+                return Optional.of(new InvalidConfig(key, val, defaultVal, InvalidConfig.RuleType.ENFORCED_VALUE_RULE));
             }
         }
-        return invalidConfigs;
+        return Optional.empty();
     }
 }
