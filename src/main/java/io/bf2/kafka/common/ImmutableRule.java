@@ -14,9 +14,10 @@ public class ImmutableRule implements ConfigRule {
     }
 
     @Override
-    public Optional<InvalidConfig> validate(String key, String val) {
+    public Optional<String> validate(String key, String val) {
         if (!mutableConfigs.contains(key)) {
-            return Optional.of(new InvalidConfig(key, val, InvalidConfig.RuleType.IMMUTABLE_RULE));
+            return Optional.of(String.format(
+                    "Topic configured with invalid configs: %s=%s. This config cannot be updated.", key, val));
         }
         return Optional.empty();
     }

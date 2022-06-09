@@ -16,19 +16,20 @@ public class RangeRule implements ConfigRule {
     }
 
     @Override
-    public Optional<InvalidConfig> validate(String key, String val) {
+    public Optional<String> validate(String key, String val) {
         if (configRange.containsKey(key)) {
             // convert the number into double for accurate comparison
             double doubleVal;
             try {
                 doubleVal = Double.parseDouble(val);
             } catch (NumberFormatException e) {
-                throw new IllegalArgumentException(String.format("The provided value is not a number: %s=%s", key, val), e);
+                return Optional.of(String.format("The provided value is not a number: %s=%s. The error is: %s.", key, val, e.getMessage()));
             }
             Range range = configRange.get(key);
 
             if (!range.contains(doubleVal)) {
-                return Optional.of(new InvalidConfig(key, val, range, InvalidConfig.RuleType.RANGE_RULE));
+                return Optional.of(String.format(
+                        "Topic configured with invalid configs: %s=%s. The value of this property should be in this range: %s.", key, val, range));
             }
         }
         return Optional.empty();

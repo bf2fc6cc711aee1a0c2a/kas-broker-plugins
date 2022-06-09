@@ -62,8 +62,8 @@ public class Utils {
             Double upperBound;
             // convert the number into double for accurate comparison
             try {
-                lowerBound = parts[1].isBlank() ? null : Double.valueOf(min);
-                upperBound = parts[2].isBlank() ? null : Double.valueOf(max);
+                lowerBound = min.isBlank() ? null : Double.valueOf(min);
+                upperBound = max.isBlank() ? null : Double.valueOf(max);
             } catch (NumberFormatException e) {
                 throw new IllegalArgumentException("The provided min or max value is not a number.", e);
             }

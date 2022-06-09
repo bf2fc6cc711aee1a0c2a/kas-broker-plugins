@@ -8,11 +8,11 @@ import java.util.Optional;
 public interface ConfigRule {
 
     /**
-     * Validate if the config is valid for a specific rule, and return the invalid config if any
+     * Validate if the config is valid for a specific rule, and return the error message if any
      *
      * @param key the config key to be customized
      * @param key the config value to be customized
-     * @return optional {@link InvalidConfig} if the provided configs violate the rule, otherwise, an empty optional instance will be returned
+     * @return optional error message if the provided configs violate the rule, otherwise, an empty optional instance will be returned
      */
-    Optional<InvalidConfig> validate(String key, String value);
+    Optional<String> validate(String key, String value);
 }

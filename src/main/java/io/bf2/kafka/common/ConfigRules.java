@@ -46,12 +46,14 @@ public class ConfigRules {
      * If this property is not specified, a default of {@link #DEFAULT_ENFORCED_VALUE_SET} will be used in this class.
      */
     public static final String ENFORCED_VALUE_CONFIGS = ALTER_CONFIG_POLICY_PREFIX + "enforced";
+    public static final String ENFORCED_VALUE_CONFIGS_DOC = "This is used to specify the configs with permitted value. It's a list in the form [keyA]:[valueA],[keyB]:[valueB]";
 
     /**
      * Custom broker property key, used to specify the configs that allow to be updated. It's a comma separated list.
      * If this property is not specified, a default of {@link #DEFAULT_MUTABLE_CONFIG_KEYS} will be used in this class.
      */
     public static final String MUTABLE_CONFIGS = ALTER_CONFIG_POLICY_PREFIX + "mutable";
+    public static final String MUTABLE_CONFIGS_DOC = "This is used to specify the configs that allow to be updated. It's a comma separated list.";
 
     /**
      * Custom broker property key, used to specify the configs that allow values within a range with the format "configA:minA:maxA,configB:minB:maxB,...".
@@ -112,19 +114,19 @@ public class ConfigRules {
             String.format("%s:%s:", SEGMENT_BYTES_CONFIG, DEFAULT_MIN_SEGMENT_BYTES));
 
     public static final String DEFAULT_CONFIG_VALUE_CONFIGS = String.join(",", DEFAULT_ENFORCED_VALUE_SET);
-    public static final String DEFAULT_IMMUTABLE_CONFIGS = String.join(",", DEFAULT_MUTABLE_CONFIG_KEYS);
+    public static final String DEFAULT_MUTABLE_CONFIGS = String.join(",", DEFAULT_MUTABLE_CONFIG_KEYS);
     public static final String DEFAULT_RANGE_CONFIGS = String.join(",", DEFAULT_RANGE_CONFIG_SET);
 
     public final Set<ConfigRule> configRules;
 
     public static final ConfigDef configDef = new ConfigDef()
-            .define(ENFORCED_VALUE_CONFIGS, ConfigDef.Type.LIST, DEFAULT_CONFIG_VALUE_CONFIGS, ConfigDef.Importance.MEDIUM, "This is used to specify the configs with permitted value. It's a list in the form [keyA]:[valueA],[keyB]:[valueB]")
-            .define(MUTABLE_CONFIGS, ConfigDef.Type.LIST, DEFAULT_IMMUTABLE_CONFIGS, ConfigDef.Importance.MEDIUM, "This is used to specify the configs that allow to be updated. It's a comma separated list.")
+            .define(ENFORCED_VALUE_CONFIGS, ConfigDef.Type.LIST, DEFAULT_CONFIG_VALUE_CONFIGS, ConfigDef.Importance.MEDIUM, ENFORCED_VALUE_CONFIGS_DOC)
+            .define(MUTABLE_CONFIGS, ConfigDef.Type.LIST, DEFAULT_MUTABLE_CONFIGS, ConfigDef.Importance.MEDIUM, MUTABLE_CONFIGS_DOC)
             .define(RANGE_CONFIGS, ConfigDef.Type.LIST, DEFAULT_RANGE_CONFIGS, ConfigDef.Importance.MEDIUM, RANGE_CONFIGS_DOC);
 
-    private Map<String, String> enforcedConfigs;
-    private Set<String> mutableConfigs;
-    private Map<String, Range> rangeConfigs;
+    private final Map<String, String> enforcedConfigs;
+    private final Set<String> mutableConfigs;
+    private final Map<String, Range> rangeConfigs;
 
     public ConfigRules(Map<String, ?> configs) {
         AbstractConfig parsedConfig = new AbstractConfig(configDef, configs);
@@ -158,16 +160,16 @@ public class ConfigRules {
     }
 
     public void validateTopicConfigs(String topic, Map<String, String> configs) {
-        Set<InvalidConfig> invalidConfigs = new HashSet<>();
+        Set<String> invalidConfigMsgs = new HashSet<>();
         for (Map.Entry<String, String> entry: configs.entrySet()) {
             for (ConfigRule rule : configRules) {
-                rule.validate(entry.getKey(), entry.getValue()).ifPresent((invalidConfigs::add));
+                rule.validate(entry.getKey(), entry.getValue()).ifPresent((invalidConfigMsgs::add));
             }
         }
 
-        if (!invalidConfigs.isEmpty()) {
+        if (!invalidConfigMsgs.isEmpty()) {
             throw new PolicyViolationException(
-                    String.format("Invalid config specified for topic %s. The violated configs are: %s", topic, invalidConfigs));
+                    String.format("Invalid config specified for topic %s. The violating configs are: %s", topic, invalidConfigMsgs));
         }
     }
 }

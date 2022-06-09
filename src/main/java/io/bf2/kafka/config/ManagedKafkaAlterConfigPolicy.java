@@ -20,16 +20,14 @@ import static io.bf2.kafka.common.PartitionCounter.configDef;
 public class ManagedKafkaAlterConfigPolicy implements AlterConfigPolicy {
     private static final Logger log = LoggerFactory.getLogger(ManagedKafkaAlterConfigPolicy.class);
 
-    private Map<String, ?> configs;
     private String privateTopicPrefix;
     private ConfigRules configRules;
 
     @Override
     public void configure(Map<String, ?> configs) {
-        this.configs = configs;
         this.configRules = new ConfigRules(configs);
 
-        AbstractConfig parsedConfig = new AbstractConfig(configDef, this.configs);
+        AbstractConfig parsedConfig = new AbstractConfig(configDef, configs);
         this.privateTopicPrefix = parsedConfig.getString(PRIVATE_TOPIC_PREFIX);
     }
 
