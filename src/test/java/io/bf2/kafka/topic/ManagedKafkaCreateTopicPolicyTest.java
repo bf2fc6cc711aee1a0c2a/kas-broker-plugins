@@ -29,6 +29,7 @@ class ManagedKafkaCreateTopicPolicyTest {
             ManagedKafkaCreateTopicPolicy.MIN_INSYNC_REPLICAS, 2,
             PartitionCounter.MAX_PARTITIONS, 1000,
             PartitionCounter.LIMIT_ENFORCED, true,
+            PartitionCounter.PRIVATE_TOPIC_PREFIX, "__kas_",
             LocalAdminClient.LISTENER_NAME, "controlplane",
             LocalAdminClient.LISTENER_PORT, "9090",
             LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT");
@@ -169,9 +170,9 @@ class ManagedKafkaCreateTopicPolicyTest {
         "topic1, 10, 3, 1, DENIED",
         "topic1, 9999, 3, 2, DENIED",
 
-        "__redhat_topic1, 10, 1, 2, ALLOWED",
-        "__redhat_topic1, 10, 3, 1, ALLOWED",
-        "__redhat_topic1, 9999, 3, 2, ALLOWED",
+        "__kas_topic1, 10, 1, 2, ALLOWED",
+        "__kas_topic1, 10, 3, 1, ALLOWED",
+        "__kas_topic1, 9999, 3, 2, ALLOWED",
     })
     void testTopicValidationBypass(String topicName, int partitions, short replicationFactor, int isr,
             String expectedResult) throws Exception {
