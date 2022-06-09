@@ -1,6 +1,7 @@
 package io.bf2.kafka.common;
 
 import com.google.common.collect.Range;
+import io.bf2.kafka.common.rule.ConfigRules;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;

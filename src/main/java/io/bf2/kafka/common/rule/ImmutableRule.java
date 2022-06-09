@@ -1,4 +1,4 @@
-package io.bf2.kafka.common;
+package io.bf2.kafka.common.rule;
 
 import java.util.Optional;
 import java.util.Set;

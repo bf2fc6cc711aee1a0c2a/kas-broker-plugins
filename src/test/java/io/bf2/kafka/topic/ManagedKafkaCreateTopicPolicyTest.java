@@ -1,6 +1,6 @@
 package io.bf2.kafka.topic;
 
-import io.bf2.kafka.common.ConfigRules;
+import io.bf2.kafka.common.rule.ConfigRules;
 import io.bf2.kafka.common.LocalAdminClient;
 import io.bf2.kafka.common.PartitionCounter;
 import org.apache.kafka.common.errors.PolicyViolationException;
@@ -18,7 +18,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
-import static io.bf2.kafka.common.ConfigRules.DEFAULT_RANGE_CONFIGS;
+import static io.bf2.kafka.common.rule.ConfigRules.DEFAULT_RANGE_CONFIGS;
 import static org.apache.kafka.common.config.TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG;
 import static org.junit.Assert.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;

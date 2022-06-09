@@ -1,7 +1,8 @@
-package io.bf2.kafka.common;
+package io.bf2.kafka.common.rule;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Range;
+import io.bf2.kafka.common.Config;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.errors.PolicyViolationException;

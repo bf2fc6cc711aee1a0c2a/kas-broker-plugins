@@ -3,7 +3,7 @@
  */
 package io.bf2.kafka.config;
 
-import io.bf2.kafka.common.ConfigRules;
+import io.bf2.kafka.common.rule.ConfigRules;
 import io.bf2.kafka.common.PartitionCounter;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigResource;

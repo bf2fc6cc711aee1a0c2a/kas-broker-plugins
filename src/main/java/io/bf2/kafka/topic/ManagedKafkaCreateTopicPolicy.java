@@ -4,7 +4,7 @@
 package io.bf2.kafka.topic;
 
 import io.bf2.kafka.common.PartitionCounter;
-import io.bf2.kafka.common.ConfigRules;
+import io.bf2.kafka.common.rule.ConfigRules;
 import kafka.server.KafkaConfig;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy;

@@ -1,6 +1,6 @@
 package io.bf2.kafka.config;
 
-import io.bf2.kafka.common.ConfigRules;
+import io.bf2.kafka.common.rule.ConfigRules;
 import io.bf2.kafka.common.LocalAdminClient;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.errors.PolicyViolationException;
@@ -14,7 +14,7 @@ import org.mockito.Mockito;
 
 import java.util.Map;
 
-import static io.bf2.kafka.common.ConfigRules.DEFAULT_RANGE_CONFIGS;
+import static io.bf2.kafka.common.rule.ConfigRules.DEFAULT_RANGE_CONFIGS;
 import static org.junit.Assert.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 

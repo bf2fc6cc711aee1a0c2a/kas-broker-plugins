@@ -1,6 +1,7 @@
 package io.bf2.kafka.common;
 
 import com.google.common.collect.Range;
+import io.bf2.kafka.common.rule.RangeRule;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
