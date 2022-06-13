@@ -1,6 +1,6 @@
 package io.bf2.kafka.config;
 
-import io.bf2.kafka.common.rule.ConfigRules;
+import io.bf2.kafka.common.Config;
 import io.bf2.kafka.common.LocalAdminClient;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.errors.PolicyViolationException;
@@ -14,7 +14,6 @@ import org.mockito.Mockito;
 
 import java.util.Map;
 
-import static io.bf2.kafka.common.rule.ConfigRules.DEFAULT_RANGE_CONFIGS;
 import static org.junit.Assert.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
@@ -23,12 +22,9 @@ class ManagedKafkaAlterConfigPolicyTest {
     private static final String TOPIC_NAME = "test";
     private ManagedKafkaAlterConfigPolicy policy;
     private Map<String, Object> configs = Map.of(
-            LocalAdminClient.LISTENER_NAME, "controlplane",
-            LocalAdminClient.LISTENER_PORT, "9090",
-            LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT",
-            ConfigRules.ENFORCED_VALUE_CONFIGS, "compression.type:producer,unclean.leader.election.enable:false",
-            ConfigRules.MUTABLE_CONFIGS, "retention.ms,max.message.bytes,segment.bytes",
-            ConfigRules.RANGE_CONFIGS, DEFAULT_RANGE_CONFIGS + ",min.cleanable.dirty.ratio:0.5:0.6");
+            Config.ENFORCED_VALUE_CONFIGS, "compression.type:producer,unclean.leader.election.enable:false",
+            Config.MUTABLE_CONFIGS, "retention.ms,max.message.bytes,segment.bytes",
+            Config.RANGE_CONFIGS, Config.DEFAULT_RANGE_CONFIGS + ",min.cleanable.dirty.ratio:0.5:0.6");
 
     @BeforeEach
     void setup() {

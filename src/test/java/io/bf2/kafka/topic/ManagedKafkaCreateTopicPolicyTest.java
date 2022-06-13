@@ -1,6 +1,6 @@
 package io.bf2.kafka.topic;
 
-import io.bf2.kafka.common.rule.ConfigRules;
+import io.bf2.kafka.common.Config;
 import io.bf2.kafka.common.LocalAdminClient;
 import io.bf2.kafka.common.PartitionCounter;
 import org.apache.kafka.common.errors.PolicyViolationException;
@@ -18,7 +18,6 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
-import static io.bf2.kafka.common.rule.ConfigRules.DEFAULT_RANGE_CONFIGS;
 import static org.apache.kafka.common.config.TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG;
 import static org.junit.Assert.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -30,14 +29,14 @@ class ManagedKafkaCreateTopicPolicyTest {
     private Map<String, Object> configs = Map.of(
             ManagedKafkaCreateTopicPolicy.DEFAULT_REPLICATION_FACTOR, 3,
             MIN_IN_SYNC_REPLICAS_CONFIG, 2,
-            PartitionCounter.MAX_PARTITIONS, 1000,
-            PartitionCounter.LIMIT_ENFORCED, true,
+            Config.MAX_PARTITIONS, 1000,
+            Config.LIMIT_ENFORCED, true,
             LocalAdminClient.LISTENER_NAME, "controlplane",
             LocalAdminClient.LISTENER_PORT, "9090",
             LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT",
-            ConfigRules.ENFORCED_VALUE_CONFIGS, "compression.type:producer,unclean.leader.election.enable:false",
-            ConfigRules.MUTABLE_CONFIGS, "min.insync.replicas,retention.ms,max.message.bytes,segment.bytes",
-            ConfigRules.RANGE_CONFIGS, DEFAULT_RANGE_CONFIGS + ",min.cleanable.dirty.ratio:0.5:0.6");
+            Config.ENFORCED_VALUE_CONFIGS, "compression.type:producer,unclean.leader.election.enable:false",
+            Config.MUTABLE_CONFIGS, "min.insync.replicas,retention.ms,max.message.bytes,segment.bytes",
+            Config.RANGE_CONFIGS, Config.DEFAULT_RANGE_CONFIGS + ",min.cleanable.dirty.ratio:0.5:0.6");
 
     @BeforeEach
     void setup() {
@@ -218,7 +217,7 @@ class ManagedKafkaCreateTopicPolicyTest {
             Map<String, Object> customConfig = new HashMap<>(configs);
 
             if (!"null".equalsIgnoreCase(featureFlag)) {
-                customConfig.put(PartitionCounter.LIMIT_ENFORCED, featureFlag);
+                customConfig.put(Config.LIMIT_ENFORCED, featureFlag);
             }
 
             policy.configure(customConfig);

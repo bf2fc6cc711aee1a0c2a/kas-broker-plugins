@@ -17,17 +17,17 @@ class ConfigRulesTest {
     void testGetDefaultRuleConfigs() {
         Map<String, ?> config = configWith(Map.of());
         ConfigRules configRules = new ConfigRules(config);
-        assertEquals(Utils.parseListToMap(List.copyOf(ConfigRules.DEFAULT_ENFORCED_VALUE_SET)), configRules.getEnforcedConfigs());
-        assertEquals(ConfigRules.DEFAULT_MUTABLE_CONFIG_KEYS, configRules.getMutableConfigs());
-        assertEquals(Utils.parseListToRangeMap(List.copyOf(ConfigRules.DEFAULT_RANGE_CONFIG_SET)), configRules.getRangeConfigs());
+        assertEquals(Config.parseListToMap(List.copyOf(Config.DEFAULT_ENFORCED_VALUE_SET)), configRules.getEnforcedConfigs());
+        assertEquals(Config.DEFAULT_MUTABLE_CONFIG_KEYS, configRules.getMutableConfigs());
+        assertEquals(Config.parseListToRangeMap(List.copyOf(Config.DEFAULT_RANGE_CONFIG_SET)), configRules.getRangeConfigs());
     }
 
     @Test
     void testGetCustomRuleConfigs() {
         Map<String, ?> config = configWith(Map.of(
-                ConfigRules.ENFORCED_VALUE_CONFIGS, "min.compaction.lag.ms:0",
-                ConfigRules.RANGE_CONFIGS, "retention.ms::604800000,min.cleanable.dirty.ratio:0.5:,segment.index.bytes:1000:10000",
-                ConfigRules.MUTABLE_CONFIGS, "compression.type"));
+                Config.ENFORCED_VALUE_CONFIGS, "min.compaction.lag.ms:0",
+                Config.RANGE_CONFIGS, "retention.ms::604800000,min.cleanable.dirty.ratio:0.5:,segment.index.bytes:1000:10000",
+                Config.MUTABLE_CONFIGS, "compression.type"));
 
         ConfigRules configRules = new ConfigRules(config);
         assertEquals(Map.of("min.compaction.lag.ms", "0"), configRules.getEnforcedConfigs());
@@ -44,9 +44,9 @@ class ConfigRulesTest {
     @Test
     void testMutableConfigsShouldContainAllConfigs() {
         Map<String, ?> config = configWith(Map.of(
-                ConfigRules.ENFORCED_VALUE_CONFIGS, "min.compaction.lag.ms:0",
-                ConfigRules.RANGE_CONFIGS, "retention.ms::604800000",
-                ConfigRules.MUTABLE_CONFIGS, "compression.type"));
+                Config.ENFORCED_VALUE_CONFIGS, "min.compaction.lag.ms:0",
+                Config.RANGE_CONFIGS, "retention.ms::604800000",
+                Config.MUTABLE_CONFIGS, "compression.type"));
 
         ConfigRules configRules = new ConfigRules(config);
         assertEquals(Set.of("compression.type", "min.compaction.lag.ms", "retention.ms"), configRules.getMutableConfigs());
@@ -55,9 +55,9 @@ class ConfigRulesTest {
     @Test
     void testGetDuplicatedCustomRuleConfigs() {
         Map<String, ?> config = configWith(Map.of(
-                ConfigRules.ENFORCED_VALUE_CONFIGS, "retention.ms:604800000",
-                ConfigRules.MUTABLE_CONFIGS, "retention.ms",
-                ConfigRules.RANGE_CONFIGS, ""));
+                Config.ENFORCED_VALUE_CONFIGS, "retention.ms:604800000",
+                Config.MUTABLE_CONFIGS, "retention.ms",
+                Config.RANGE_CONFIGS, ""));
 
         ConfigRules configRules = new ConfigRules(config);
         assertEquals(Map.of("retention.ms", "604800000"), configRules.getEnforcedConfigs());
@@ -66,7 +66,7 @@ class ConfigRulesTest {
 
     private Map<String, ?> configWith(Map<String, ?> customEntries) {
         Map<String, ?> defaults = Map.of(
-                PartitionCounter.MAX_PARTITIONS, 1000,
+                Config.MAX_PARTITIONS, 1000,
                 LocalAdminClient.LISTENER_NAME, "controlplane",
                 LocalAdminClient.LISTENER_PORT, "9090",
                 LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT");

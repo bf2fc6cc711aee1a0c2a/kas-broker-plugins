@@ -34,7 +34,7 @@ class PartitionCounterIT {
                 List<NewTopic> newTopics = List.of(
                         new NewTopic("topic1", PUBLIC_PARTITION_COUNT / 2, (short) 1),
                         new NewTopic("topic2", PUBLIC_PARTITION_COUNT / 2, (short) 1),
-                        new NewTopic(PartitionCounter.DEFAULT_PRIVATE_TOPIC_PREFIX + "topic", 11, (short) 1),
+                        new NewTopic(Config.DEFAULT_PRIVATE_TOPIC_PREFIX + "topic", 11, (short) 1),
                         new NewTopic("__consumer_offsets", 12, (short) 1),
                         new NewTopic("__transaction_state", 13, (short) 1));
                 CreateTopicsResult result = admin.createTopics(newTopics);
@@ -48,7 +48,7 @@ class PartitionCounterIT {
                                 LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT").entrySet().stream())
                         .collect(Collectors.toMap(e -> e.getKey().toString(), Entry::getValue));
                 try (PartitionCounter partitionCounter = PartitionCounter.create(config)) {
-                    await().atMost(PartitionCounter.DEFAULT_SCHEDULE_INTERVAL_SECONDS * 2, TimeUnit.SECONDS)
+                    await().atMost(Config.DEFAULT_SCHEDULE_INTERVAL_SECONDS * 2, TimeUnit.SECONDS)
                             .until(() -> partitionCounter.getExistingPartitionCount() == PUBLIC_PARTITION_COUNT);
                 }
             }

@@ -7,20 +7,18 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import static io.bf2.kafka.common.Utils.parseListToMap;
-import static io.bf2.kafka.common.Utils.parseListToRangeMap;
 import static org.junit.jupiter.api.Assertions.*;
 
-class UtilsTest {
+class ConfigTest {
 
     @Test
     void parseListToMapShouldReturnEmptyMapWithNullList() {
-        assertEquals(Collections.emptyMap(), parseListToMap(null));
+        assertEquals(Collections.emptyMap(), Config.parseListToMap(null));
     }
 
     @Test
     void parseListToMapShouldReturnEmptyMapWithEmptyList() {
-        assertEquals(Collections.emptyMap(), parseListToMap(Collections.emptyList()));
+        assertEquals(Collections.emptyMap(), Config.parseListToMap(Collections.emptyList()));
     }
 
     @Test
@@ -35,7 +33,7 @@ class UtilsTest {
                 "xx.yy.zz", "0.5",
                 "xxx.yyy.zzz", "abc"
         );
-        assertEquals(expectedMap, parseListToMap(configList));
+        assertEquals(expectedMap, Config.parseListToMap(configList));
     }
 
     @Test
@@ -45,17 +43,17 @@ class UtilsTest {
                 "xx.yy.zz:0.5",
                 "bad.format"
         );
-        assertThrows(IllegalArgumentException.class, () -> parseListToMap(configList));
+        assertThrows(IllegalArgumentException.class, () -> Config.parseListToMap(configList));
     }
 
     @Test
     void parseListToRangeMapShouldReturnEmptyMapWithNullList() {
-        assertEquals(Collections.emptyMap(), parseListToRangeMap(Collections.emptyList()));
+        assertEquals(Collections.emptyMap(), Config.parseListToRangeMap(Collections.emptyList()));
     }
 
     @Test
     void parseListToRangeMapShouldReturnEmptyMapWithEmptyList() {
-        assertEquals(Collections.emptyMap(), parseListToRangeMap(Collections.emptyList()));
+        assertEquals(Collections.emptyMap(), Config.parseListToRangeMap(Collections.emptyList()));
     }
 
     @Test
@@ -70,7 +68,7 @@ class UtilsTest {
                 "xx.yy.zz", Range.atLeast((double)0.5),
                 "xxx.yyy.zzz", Range.atMost((double)500)
         );
-        assertEquals(expectedMap, parseListToRangeMap(configList));
+        assertEquals(expectedMap, Config.parseListToRangeMap(configList));
     }
 
     @Test
@@ -80,7 +78,7 @@ class UtilsTest {
                 "xx.yy.zz:0.5:",
                 "bad.format:123"
         );
-        assertThrows(IllegalArgumentException.class, () -> parseListToRangeMap(configList));
+        assertThrows(IllegalArgumentException.class, () -> Config.parseListToRangeMap(configList));
     }
 
     @Test
@@ -90,7 +88,7 @@ class UtilsTest {
                 "xx.yy.zz:0.5:",
                 "bad.format:abc:123"
         );
-        assertThrows(IllegalArgumentException.class, () -> parseListToRangeMap(configList));
+        assertThrows(IllegalArgumentException.class, () -> Config.parseListToRangeMap(configList));
     }
 
     @Test
@@ -100,7 +98,7 @@ class UtilsTest {
                 "xx.yy.zz:0.5:",
                 "bad.format:123:abc"
         );
-        assertThrows(IllegalArgumentException.class, () -> parseListToRangeMap(configList));
+        assertThrows(IllegalArgumentException.class, () -> Config.parseListToRangeMap(configList));
     }
 
     @Test
@@ -110,6 +108,6 @@ class UtilsTest {
                 "xx.yy.zz:0.5:",
                 "bad.format::"
         );
-        assertThrows(IllegalArgumentException.class, () -> parseListToRangeMap(configList));
+        assertThrows(IllegalArgumentException.class, () -> Config.parseListToRangeMap(configList));
     }
 }

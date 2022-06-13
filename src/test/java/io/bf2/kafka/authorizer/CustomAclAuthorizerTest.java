@@ -3,6 +3,7 @@
  */
 package io.bf2.kafka.authorizer;
 
+import io.bf2.kafka.common.Config;
 import io.bf2.kafka.common.PartitionCounter;
 import org.apache.kafka.common.acl.AccessControlEntry;
 import org.apache.kafka.common.acl.AclBinding;
@@ -295,7 +296,7 @@ class CustomAclAuthorizerTest {
             Map<String, Object> customConfig = new HashMap<>(config);
 
             if (!"null".equalsIgnoreCase(featureFlag)) {
-                customConfig.put(PartitionCounter.LIMIT_ENFORCED, featureFlag);
+                customConfig.put(Config.LIMIT_ENFORCED, featureFlag);
             }
 
             auth.configure(customConfig);

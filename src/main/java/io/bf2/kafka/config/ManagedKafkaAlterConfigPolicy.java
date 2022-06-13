@@ -1,5 +1,6 @@
 package io.bf2.kafka.config;
 
+import io.bf2.kafka.common.Config;
 import io.bf2.kafka.common.rule.ConfigRules;
 import io.bf2.kafka.common.PartitionCounter;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -11,9 +12,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
-import static io.bf2.kafka.common.PartitionCounter.PRIVATE_TOPIC_PREFIX;
-import static io.bf2.kafka.common.PartitionCounter.configDef;
-
 public class ManagedKafkaAlterConfigPolicy implements AlterConfigPolicy {
     private static final Logger log = LoggerFactory.getLogger(ManagedKafkaAlterConfigPolicy.class);
 
@@ -24,8 +22,8 @@ public class ManagedKafkaAlterConfigPolicy implements AlterConfigPolicy {
     public void configure(Map<String, ?> configs) {
         this.configRules = new ConfigRules(configs);
 
-        AbstractConfig parsedConfig = new AbstractConfig(configDef, configs);
-        this.privateTopicPrefix = parsedConfig.getString(PRIVATE_TOPIC_PREFIX);
+        AbstractConfig parsedConfig = new AbstractConfig(Config.PARTITION_COUNTER_CONFIG_DEF, configs);
+        this.privateTopicPrefix = parsedConfig.getString(Config.PRIVATE_TOPIC_PREFIX);
     }
 
     @Override
