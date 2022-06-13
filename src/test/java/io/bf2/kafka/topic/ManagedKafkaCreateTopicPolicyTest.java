@@ -1,5 +1,6 @@
 package io.bf2.kafka.topic;
 
+import com.google.common.collect.ImmutableMap;
 import io.bf2.kafka.common.Config;
 import io.bf2.kafka.common.LocalAdminClient;
 import io.bf2.kafka.common.PartitionCounter;
@@ -26,17 +27,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ManagedKafkaCreateTopicPolicyTest {
     private ManagedKafkaCreateTopicPolicy policy;
-    private Map<String, Object> configs = Map.of(
-            ManagedKafkaCreateTopicPolicy.DEFAULT_REPLICATION_FACTOR, 3,
-            MIN_IN_SYNC_REPLICAS_CONFIG, 2,
-            Config.MAX_PARTITIONS, 1000,
-            Config.LIMIT_ENFORCED, true,
-            LocalAdminClient.LISTENER_NAME, "controlplane",
-            LocalAdminClient.LISTENER_PORT, "9090",
-            LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT",
-            Config.ENFORCED_VALUE_CONFIGS, "compression.type:producer,unclean.leader.election.enable:false",
-            Config.MUTABLE_CONFIGS, "min.insync.replicas,retention.ms,max.message.bytes,segment.bytes",
-            Config.RANGE_CONFIGS, Config.DEFAULT_RANGE_CONFIGS + ",min.cleanable.dirty.ratio:0.5:0.6");
+    private Map<String, Object> configs = ImmutableMap.<String, Object>builder()
+            .put(ManagedKafkaCreateTopicPolicy.DEFAULT_REPLICATION_FACTOR, 3)
+            .put(MIN_IN_SYNC_REPLICAS_CONFIG, 2)
+            .put(Config.MAX_PARTITIONS, 1000)
+            .put(Config.LIMIT_ENFORCED, true)
+            .put(Config.PRIVATE_TOPIC_PREFIX, "__kas_")
+            .put(LocalAdminClient.LISTENER_NAME, "controlplane")
+            .put(LocalAdminClient.LISTENER_PORT, "9090")
+            .put(LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT")
+            .put(Config.ENFORCED_VALUE_CONFIGS, "compression.type:producer,unclean.leader.election.enable:false")
+            .put(Config.MUTABLE_CONFIGS, "min.insync.replicas,retention.ms,max.message.bytes,segment.bytes")
+            .put(Config.RANGE_CONFIGS, Config.DEFAULT_RANGE_CONFIGS + ",min.cleanable.dirty.ratio:0.5:0.6")
+            .build();
 
     @BeforeEach
     void setup() {
@@ -238,9 +241,9 @@ class ManagedKafkaCreateTopicPolicyTest {
         "topic1, 10, 3, 1, DENIED",
         "topic1, 9999, 3, 2, DENIED",
 
-        "__redhat_topic1, 10, 1, 2, ALLOWED",
-        "__redhat_topic1, 10, 3, 1, ALLOWED",
-        "__redhat_topic1, 9999, 3, 2, ALLOWED",
+        "__kas_topic1, 10, 1, 2, ALLOWED",
+        "__kas_topic1, 10, 3, 1, ALLOWED",
+        "__kas_topic1, 9999, 3, 2, ALLOWED",
     })
     void testTopicValidationBypass(String topicName, int partitions, short replicationFactor, int isr,
             String expectedResult) throws Exception {
