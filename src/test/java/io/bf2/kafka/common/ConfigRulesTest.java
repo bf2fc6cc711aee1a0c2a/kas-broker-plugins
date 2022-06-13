@@ -34,7 +34,7 @@ class ConfigRulesTest {
         Set<String> expectedMutableConfigs = Set.of("compression.type", "min.compaction.lag.ms", "segment.index.bytes", "retention.ms", "min.cleanable.dirty.ratio");
         assertEquals(expectedMutableConfigs, configRules.getMutableConfigs());
 
-        Map<String, Range> expectedRangeConfigs = new HashMap<>(Map.of(
+        Map<String, Range<Double>> expectedRangeConfigs = new HashMap<>(Map.of(
                 "min.cleanable.dirty.ratio", Range.atLeast((double)0.5),
                 "retention.ms", Range.atMost((double)604800000),
                 "segment.index.bytes", Range.closed((double)1000, (double)10000)));

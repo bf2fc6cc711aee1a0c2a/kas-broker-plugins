@@ -1,7 +1,6 @@
 package io.bf2.kafka.common;
 
 import com.google.common.collect.Range;
-import org.apache.kafka.common.errors.PolicyViolationException;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -40,12 +39,12 @@ public class Utils {
      * @param list the list with the format: key1:min1:max1,key2:min2:max2
      * @return  the unmodifiable map with the {key1=range1, key2=range2}
      */
-    public static Map<String, Range> parseListToRangeMap(List<String> list) {
+    public static Map<String, Range<Double>> parseListToRangeMap(List<String> list) {
         if (list == null || list.isEmpty()) {
             return Collections.emptyMap();
         }
 
-        Map<String, Range> map = new HashMap<>(list.size());
+        Map<String, Range<Double>> map = new HashMap<>(list.size());
 
         list.stream().forEach(s -> {
             // split "key:min:max" into [key, min, max]

@@ -9,9 +9,9 @@ import java.util.Optional;
  * This is a rule that allows values within a provided range
  */
 public class RangeRule implements ConfigRule {
-    private final Map<String, Range> configRange;
+    private final Map<String, Range<Double>> configRange;
 
-    public RangeRule(Map<String, Range> configRange) {
+    public RangeRule(Map<String, Range<Double>> configRange) {
         this.configRange = configRange;
     }
 
@@ -25,7 +25,7 @@ public class RangeRule implements ConfigRule {
             } catch (NumberFormatException e) {
                 return Optional.of(String.format("The provided value is not a number: %s=%s. The error is: %s.", key, val, e.getMessage()));
             }
-            Range range = configRange.get(key);
+            Range<Double> range = configRange.get(key);
 
             if (!range.contains(doubleVal)) {
                 return Optional.of(String.format(

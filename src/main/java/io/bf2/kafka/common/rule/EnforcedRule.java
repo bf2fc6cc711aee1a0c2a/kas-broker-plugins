@@ -4,19 +4,19 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * This is a rule that only allows configs using the provided value
+ * This is a rule that only allows configs using the expected value
  */
-public class EnforcedValueRule implements ConfigRule {
-    private final Map<String, String> configWithDefaultValue;
+public class EnforcedRule implements ConfigRule {
+    private final Map<String, String> enforcedConfigs;
 
-    public EnforcedValueRule(Map<String, String> configWithDefaultValue) {
-        this.configWithDefaultValue = configWithDefaultValue;
+    public EnforcedRule(Map<String, String> configWithDefaultValue) {
+        this.enforcedConfigs = configWithDefaultValue;
     }
 
     @Override
     public Optional<String> validate(String key, String val) {
-        if (configWithDefaultValue.containsKey(key)) {
-            String expectedValue = configWithDefaultValue.get(key);
+        if (enforcedConfigs.containsKey(key)) {
+            String expectedValue = enforcedConfigs.get(key);
             if (!val.equals(expectedValue)) {
                 return Optional.of(String.format(
                         "Topic configured with invalid configs: %s=%s. Please don't try to set this property, or only try to set it to: %s.", key, val, expectedValue));

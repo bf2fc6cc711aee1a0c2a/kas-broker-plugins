@@ -127,7 +127,7 @@ public class ConfigRules {
 
     private final Map<String, String> enforcedConfigs;
     private final Set<String> mutableConfigs;
-    private final Map<String, Range> rangeConfigs;
+    private final Map<String, Range<Double>> rangeConfigs;
 
     public ConfigRules(Map<String, ?> configs) {
         AbstractConfig parsedConfig = new AbstractConfig(configDef, configs);
@@ -143,7 +143,7 @@ public class ConfigRules {
                 .build();
 
         configRules = Set.of(
-                new EnforcedValueRule(enforcedConfigs),
+                new EnforcedRule(enforcedConfigs),
                 new ImmutableRule(mutableConfigs),
                 new RangeRule(rangeConfigs));
     }
@@ -152,7 +152,7 @@ public class ConfigRules {
         return enforcedConfigs;
     }
 
-    public Map<String, Range> getRangeConfigs() {
+    public Map<String, Range<Double>> getRangeConfigs() {
         return rangeConfigs;
     }
 

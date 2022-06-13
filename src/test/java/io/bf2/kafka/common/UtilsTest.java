@@ -65,7 +65,7 @@ class UtilsTest {
                 "xx.yy.zz:0.5:",
                 "xxx.yyy.zzz::500"
         );
-        Map<String, Range> expectedMap = Map.of(
+        Map<String, Range<Double>> expectedMap = Map.of(
                 "x.y.z", Range.closed((double)100, (double)200),
                 "xx.yy.zz", Range.atLeast((double)0.5),
                 "xxx.yyy.zzz", Range.atMost((double)500)
