@@ -9,12 +9,12 @@
         <version>39</version>
     </parent>
 
-    <groupId>io.bf2.kafka</groupId>
-    <artifactId>group-authorizer</artifactId>
+    <groupId>io.bf2.kas</groupId>
+    <artifactId>kas-broker-plugins</artifactId>
     <version>2.3.1-SNAPSHOT</version>
 
-    <name>strimzi-kafka-group-authorizer</name>
-    <description>A Group ACL Authorizer for Strmzi Kafaka</description>
+    <name>kas-broker-plugins</name>
+    <description>A collection of plugins for Apache Kafka</description>
 
     <licenses>
         <license>
@@ -24,23 +24,10 @@
     </licenses>
 
     <scm>
-        <connection>scm:git:git://github.com/bf2fc6cc711aee1a0c2a/kafka-group-authorizer.git</connection>
-        <developerConnection>scm:git:git@github.com:bf2fc6cc711aee1a0c2a/kafka-group-authorizer.git</developerConnection>
+        <connection>scm:git:git://github.com/bf2fc6cc711aee1a0c2a/kas-broker-plugins.git</connection>
+        <developerConnection>scm:git:git@github.com:bf2fc6cc711aee1a0c2a/kas-broker-plugins.git</developerConnection>
         <tag>HEAD</tag>
     </scm>
-
-    <developers>
-        <developer>
-            <name>Ramesh Reddy</name>
-            <id>rareddy</id>
-            <email>rareddy@redhat.com</email>
-            <organization>Red Hat</organization>
-            <roles>
-                <role>Project Lead</role>
-            </roles>
-            <timezone>-6</timezone>
-        </developer>
-    </developers>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
