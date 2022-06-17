@@ -25,8 +25,8 @@ public class ConfigRules {
     public ConfigRules(Map<String, ?> configs) {
         AbstractConfig parsedConfig = new AbstractConfig(Config.TOPIC_POLICY_CONFIG_DEF, configs);
 
-        enforcedConfigs = parseListToMap(parsedConfig.getList(Config.ENFORCED_VALUE_CONFIGS));
-        rangeConfigs = parseListToRangeMap(parsedConfig.getList(Config.RANGE_CONFIGS));
+        enforcedConfigs = parseListToMap(Config.ENFORCED_VALUE_CONFIGS, parsedConfig.getList(Config.ENFORCED_VALUE_CONFIGS));
+        rangeConfigs = parseListToRangeMap(Config.RANGE_CONFIGS, parsedConfig.getList(Config.RANGE_CONFIGS));
 
         // mutable configs should be the union of all config keys
         mutableConfigs = ImmutableSet.<String>builder()
@@ -69,13 +69,14 @@ public class ConfigRules {
 
 
     /**
-     * This method gets comma separated values which contains key,value pairs and returns a map of
-     * key value pairs. the format of string is key1:val1,key2:val2 ....
+     * This method gets a list of values which contains key,value pairs and returns a map of
+     * key value pairs. the format of list is ["key1:val1", "key2:val2", ....]
      *
+     * @param configKey the config key for this list value
      * @param list the list with the format: key1:val1,key2:val2
      * @return  the unmodifiable map with the {key1=val1, key2=val2}
      */
-    public Map<String, String> parseListToMap(List<String> list) {
+    public Map<String, String> parseListToMap(String configKey, List<String> list) {
         if (list == null || list.isEmpty()) {
             return Collections.emptyMap();
         }
@@ -85,7 +86,7 @@ public class ConfigRules {
         list.stream().forEach(s -> {
             int delimiter = s.lastIndexOf(":");
             if (delimiter == -1) {
-                throw new IllegalArgumentException("The provided config is not in the correct format: config:value");
+                throw new IllegalArgumentException(String.format("The provided config [%s=%s] is not in the correct format: config:value", configKey, s));
             }
             map.put(s.substring(0, delimiter).trim(), s.substring(delimiter + 1).trim());
         });
@@ -93,13 +94,14 @@ public class ConfigRules {
     }
 
     /**
-     * This method gets comma separated values which contains key:min:max and returns a map of
-     * key range pairs. the format of string is key1:min1:max1,key2:min2:max2 ....
+     * This method gets a list of values which contains key:min:max and returns a map of
+     * key range pairs. the format of string is ["key1:min1:max1", "key2:min2:max2", ....]
      *
+     * @param configKey the config key for this list value
      * @param list the list with the format: key1:min1:max1,key2:min2:max2
      * @return  the unmodifiable map with the {key1=range1, key2=range2}
      */
-    public Map<String, Range<Double>> parseListToRangeMap(List<String> list) {
+    public Map<String, Range<Double>> parseListToRangeMap(String configKey, List<String> list) {
         if (list == null || list.isEmpty()) {
             return Collections.emptyMap();
         }
@@ -110,10 +112,10 @@ public class ConfigRules {
             // split "key:min:max" into [key, min, max]
             String[] parts = s.split(":", 3);
             if (parts.length != 3) {
-                throw new IllegalArgumentException("The provided config is not in the correct format: config:minValue:maxValue");
+                throw new IllegalArgumentException(String.format("The provided config [%s=%s] is not in the correct format: config:minValue:maxValue", configKey, s));
             }
 
-            String configKey = parts[0].trim();
+            String confKey = parts[0].trim();
             String min = parts[1];
             String max = parts[2];
 
@@ -124,17 +126,17 @@ public class ConfigRules {
                 lowerBound = min.isBlank() ? null : Double.valueOf(min);
                 upperBound = max.isBlank() ? null : Double.valueOf(max);
             } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("The provided min or max value is not a number.", e);
+                throw new IllegalArgumentException(String.format("The min or max value of the provided config [%s=%s] is not a number.", configKey, s), e);
             }
 
             if (lowerBound == null && upperBound == null) {
-                throw new IllegalArgumentException("The provided lower bound and upper bound value are empty.");
+                throw new IllegalArgumentException(String.format("The lower bound and upper bound value of the provided config [%s=%s] are blank.", configKey, s));
             } else if (lowerBound == null) {
-                map.put(configKey, Range.atMost(upperBound));
+                map.put(confKey, Range.atMost(upperBound));
             } else if (upperBound == null) {
-                map.put(configKey, Range.atLeast(lowerBound));
+                map.put(confKey, Range.atLeast(lowerBound));
             } else {
-                map.put(configKey, Range.closed(lowerBound, upperBound));
+                map.put(confKey, Range.closed(lowerBound, upperBound));
             }
         });
         return Map.copyOf(map);

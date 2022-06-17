@@ -1,13 +1,7 @@
 package io.bf2.kafka.common;
 
-import com.google.common.collect.Range;
-import io.bf2.kafka.common.rule.ConfigRule;
 import org.apache.kafka.common.config.ConfigDef;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import static org.apache.kafka.common.config.TopicConfig.CLEANUP_POLICY_CONFIG;

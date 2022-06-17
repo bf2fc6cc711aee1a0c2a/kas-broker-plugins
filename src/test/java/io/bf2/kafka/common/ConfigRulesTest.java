@@ -14,13 +14,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ConfigRulesTest {
-    final private ConfigRules defaultConfigRules = new ConfigRules(configWith(Collections.emptyMap()));
+    private static String DUMMY_CONFIG_KEY = "dummyConfig";
+    private ConfigRules defaultConfigRules = new ConfigRules(configWith(Collections.emptyMap()));
 
     @Test
     void testGetDefaultRuleConfigs() {
-        assertEquals(defaultConfigRules.parseListToMap(List.copyOf(Config.DEFAULT_ENFORCED_VALUE_SET)), defaultConfigRules.getEnforcedConfigs());
+        assertEquals(defaultConfigRules.parseListToMap(DUMMY_CONFIG_KEY, List.copyOf(Config.DEFAULT_ENFORCED_VALUE_SET)), defaultConfigRules.getEnforcedConfigs());
         assertEquals(Config.DEFAULT_MUTABLE_CONFIG_KEYS, defaultConfigRules.getMutableConfigs());
-        assertEquals(defaultConfigRules.parseListToRangeMap(List.copyOf(Config.DEFAULT_RANGE_CONFIG_SET)), defaultConfigRules.getRangeConfigs());
+        assertEquals(defaultConfigRules.parseListToRangeMap(DUMMY_CONFIG_KEY, List.copyOf(Config.DEFAULT_RANGE_CONFIG_SET)), defaultConfigRules.getRangeConfigs());
     }
 
     @Test
@@ -67,12 +68,12 @@ class ConfigRulesTest {
 
     @Test
     void parseListToMapShouldReturnEmptyMapWithNullList() {
-        assertEquals(Collections.emptyMap(), defaultConfigRules.parseListToMap(null));
+        assertEquals(Collections.emptyMap(), defaultConfigRules.parseListToMap(DUMMY_CONFIG_KEY, null));
     }
 
     @Test
     void parseListToMapShouldReturnEmptyMapWithEmptyList() {
-        assertEquals(Collections.emptyMap(), defaultConfigRules.parseListToMap(Collections.emptyList()));
+        assertEquals(Collections.emptyMap(), defaultConfigRules.parseListToMap(DUMMY_CONFIG_KEY, Collections.emptyList()));
     }
 
     @Test
@@ -87,7 +88,7 @@ class ConfigRulesTest {
                 "xx.yy.zz", "0.5",
                 "xxx.yyy.zzz", "abc"
         );
-        assertEquals(expectedMap, defaultConfigRules.parseListToMap(configList));
+        assertEquals(expectedMap, defaultConfigRules.parseListToMap(DUMMY_CONFIG_KEY, configList));
     }
 
     @Test
@@ -97,17 +98,17 @@ class ConfigRulesTest {
                 "xx.yy.zz:0.5",
                 "bad.format"
         );
-        assertThrows(IllegalArgumentException.class, () -> defaultConfigRules.parseListToMap(configList));
+        assertThrows(IllegalArgumentException.class, () -> defaultConfigRules.parseListToMap(DUMMY_CONFIG_KEY, configList));
     }
 
     @Test
     void parseListToRangeMapShouldReturnEmptyMapWithNullList() {
-        assertEquals(Collections.emptyMap(), defaultConfigRules.parseListToRangeMap(Collections.emptyList()));
+        assertEquals(Collections.emptyMap(), defaultConfigRules.parseListToRangeMap(DUMMY_CONFIG_KEY, Collections.emptyList()));
     }
 
     @Test
     void parseListToRangeMapShouldReturnEmptyMapWithEmptyList() {
-        assertEquals(Collections.emptyMap(), defaultConfigRules.parseListToRangeMap(Collections.emptyList()));
+        assertEquals(Collections.emptyMap(), defaultConfigRules.parseListToRangeMap(DUMMY_CONFIG_KEY, Collections.emptyList()));
     }
 
     @Test
@@ -122,7 +123,7 @@ class ConfigRulesTest {
                 "xx.yy.zz", Range.atLeast((double)0.5),
                 "xxx.yyy.zzz", Range.atMost((double)500)
         );
-        assertEquals(expectedMap, defaultConfigRules.parseListToRangeMap(configList));
+        assertEquals(expectedMap, defaultConfigRules.parseListToRangeMap(DUMMY_CONFIG_KEY, configList));
     }
 
     @Test
@@ -132,7 +133,7 @@ class ConfigRulesTest {
                 "xx.yy.zz:0.5:",
                 "bad.format:123"
         );
-        assertThrows(IllegalArgumentException.class, () -> defaultConfigRules.parseListToRangeMap(configList));
+        assertThrows(IllegalArgumentException.class, () -> defaultConfigRules.parseListToRangeMap(DUMMY_CONFIG_KEY, configList));
     }
 
     @Test
@@ -142,7 +143,7 @@ class ConfigRulesTest {
                 "xx.yy.zz:0.5:",
                 "bad.format:abc:123"
         );
-        assertThrows(IllegalArgumentException.class, () -> defaultConfigRules.parseListToRangeMap(configList));
+        assertThrows(IllegalArgumentException.class, () -> defaultConfigRules.parseListToRangeMap(DUMMY_CONFIG_KEY, configList));
     }
 
     @Test
@@ -152,7 +153,7 @@ class ConfigRulesTest {
                 "xx.yy.zz:0.5:",
                 "bad.format:123:abc"
         );
-        assertThrows(IllegalArgumentException.class, () -> defaultConfigRules.parseListToRangeMap(configList));
+        assertThrows(IllegalArgumentException.class, () -> defaultConfigRules.parseListToRangeMap(DUMMY_CONFIG_KEY, configList));
     }
 
     @Test
@@ -162,7 +163,7 @@ class ConfigRulesTest {
                 "xx.yy.zz:0.5:",
                 "bad.format::"
         );
-        assertThrows(IllegalArgumentException.class, () -> defaultConfigRules.parseListToRangeMap(configList));
+        assertThrows(IllegalArgumentException.class, () -> defaultConfigRules.parseListToRangeMap(DUMMY_CONFIG_KEY, configList));
     }
 
     private Map<String, ?> configWith(Map<String, ?> customEntries) {
