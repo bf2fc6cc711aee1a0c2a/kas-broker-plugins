@@ -4,22 +4,23 @@ import com.google.common.collect.Range;
 import io.bf2.kafka.common.rule.ConfigRules;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ConfigRulesTest {
+    final private ConfigRules defaultConfigRules = new ConfigRules(configWith(Collections.emptyMap()));
 
     @Test
     void testGetDefaultRuleConfigs() {
-        Map<String, ?> config = configWith(Map.of());
-        ConfigRules configRules = new ConfigRules(config);
-        assertEquals(Config.parseListToMap(List.copyOf(Config.DEFAULT_ENFORCED_VALUE_SET)), configRules.getEnforcedConfigs());
-        assertEquals(Config.DEFAULT_MUTABLE_CONFIG_KEYS, configRules.getMutableConfigs());
-        assertEquals(Config.parseListToRangeMap(List.copyOf(Config.DEFAULT_RANGE_CONFIG_SET)), configRules.getRangeConfigs());
+        assertEquals(defaultConfigRules.parseListToMap(List.copyOf(Config.DEFAULT_ENFORCED_VALUE_SET)), defaultConfigRules.getEnforcedConfigs());
+        assertEquals(Config.DEFAULT_MUTABLE_CONFIG_KEYS, defaultConfigRules.getMutableConfigs());
+        assertEquals(defaultConfigRules.parseListToRangeMap(List.copyOf(Config.DEFAULT_RANGE_CONFIG_SET)), defaultConfigRules.getRangeConfigs());
     }
 
     @Test
@@ -62,6 +63,106 @@ class ConfigRulesTest {
         ConfigRules configRules = new ConfigRules(config);
         assertEquals(Map.of("retention.ms", "604800000"), configRules.getEnforcedConfigs());
         assertEquals(Set.of("retention.ms"), configRules.getMutableConfigs());
+    }
+
+    @Test
+    void parseListToMapShouldReturnEmptyMapWithNullList() {
+        assertEquals(Collections.emptyMap(), defaultConfigRules.parseListToMap(null));
+    }
+
+    @Test
+    void parseListToMapShouldReturnEmptyMapWithEmptyList() {
+        assertEquals(Collections.emptyMap(), defaultConfigRules.parseListToMap(Collections.emptyList()));
+    }
+
+    @Test
+    void parseListToMapShouldReturnExpectedMap() {
+        List<String> configList = List.of(
+                "x.y.z:123",
+                "xx.yy.zz:0.5",
+                "xxx.yyy.zzz:abc"
+        );
+        Map<String, String> expectedMap = Map.of(
+                "x.y.z", "123",
+                "xx.yy.zz", "0.5",
+                "xxx.yyy.zzz", "abc"
+        );
+        assertEquals(expectedMap, defaultConfigRules.parseListToMap(configList));
+    }
+
+    @Test
+    void parseListToMapShouldThrowExceptionIfBadFormat() {
+        List<String> configList = List.of(
+                "x.y.z:123",
+                "xx.yy.zz:0.5",
+                "bad.format"
+        );
+        assertThrows(IllegalArgumentException.class, () -> defaultConfigRules.parseListToMap(configList));
+    }
+
+    @Test
+    void parseListToRangeMapShouldReturnEmptyMapWithNullList() {
+        assertEquals(Collections.emptyMap(), defaultConfigRules.parseListToRangeMap(Collections.emptyList()));
+    }
+
+    @Test
+    void parseListToRangeMapShouldReturnEmptyMapWithEmptyList() {
+        assertEquals(Collections.emptyMap(), defaultConfigRules.parseListToRangeMap(Collections.emptyList()));
+    }
+
+    @Test
+    void parseListToRangeMapShouldReturnExpectedMap() {
+        List<String> configList = List.of(
+                "x.y.z:100:200",
+                "xx.yy.zz:0.5:",
+                "xxx.yyy.zzz::500"
+        );
+        Map<String, Range<Double>> expectedMap = Map.of(
+                "x.y.z", Range.closed((double)100, (double)200),
+                "xx.yy.zz", Range.atLeast((double)0.5),
+                "xxx.yyy.zzz", Range.atMost((double)500)
+        );
+        assertEquals(expectedMap, defaultConfigRules.parseListToRangeMap(configList));
+    }
+
+    @Test
+    void parseListToRangeMapShouldThrowExceptionIfBadFormat() {
+        List<String> configList = List.of(
+                "x.y.z:100:200",
+                "xx.yy.zz:0.5:",
+                "bad.format:123"
+        );
+        assertThrows(IllegalArgumentException.class, () -> defaultConfigRules.parseListToRangeMap(configList));
+    }
+
+    @Test
+    void parseListToRangeMapShouldThrowExceptionIfMinIsNotNumber() {
+        List<String> configList = List.of(
+                "x.y.z:100:200",
+                "xx.yy.zz:0.5:",
+                "bad.format:abc:123"
+        );
+        assertThrows(IllegalArgumentException.class, () -> defaultConfigRules.parseListToRangeMap(configList));
+    }
+
+    @Test
+    void parseListToRangeMapShouldThrowExceptionIfMaxIsNotNumber() {
+        List<String> configList = List.of(
+                "x.y.z:100:200",
+                "xx.yy.zz:0.5:",
+                "bad.format:123:abc"
+        );
+        assertThrows(IllegalArgumentException.class, () -> defaultConfigRules.parseListToRangeMap(configList));
+    }
+
+    @Test
+    void parseListToRangeMapShouldThrowExceptionIfNoMinAndMax() {
+        List<String> configList = List.of(
+                "x.y.z:100:200",
+                "xx.yy.zz:0.5:",
+                "bad.format::"
+        );
+        assertThrows(IllegalArgumentException.class, () -> defaultConfigRules.parseListToRangeMap(configList));
     }
 
     private Map<String, ?> configWith(Map<String, ?> customEntries) {
