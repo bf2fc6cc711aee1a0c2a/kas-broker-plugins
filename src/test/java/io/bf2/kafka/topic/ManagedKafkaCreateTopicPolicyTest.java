@@ -1,5 +1,7 @@
 package io.bf2.kafka.topic;
 
+import com.google.common.collect.ImmutableMap;
+import io.bf2.kafka.common.Config;
 import io.bf2.kafka.common.LocalAdminClient;
 import io.bf2.kafka.common.PartitionCounter;
 import org.apache.kafka.common.errors.PolicyViolationException;
@@ -17,22 +19,27 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
+import static org.apache.kafka.common.config.TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG;
 import static org.junit.Assert.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 
 class ManagedKafkaCreateTopicPolicyTest {
-    ManagedKafkaCreateTopicPolicy policy;
-    Map<String, Object> configs = Map.of(
-            ManagedKafkaCreateTopicPolicy.DEFAULT_REPLICATION_FACTOR, 3,
-            ManagedKafkaCreateTopicPolicy.MIN_INSYNC_REPLICAS, 2,
-            PartitionCounter.MAX_PARTITIONS, 1000,
-            PartitionCounter.LIMIT_ENFORCED, true,
-            PartitionCounter.PRIVATE_TOPIC_PREFIX, "__kas_",
-            LocalAdminClient.LISTENER_NAME, "controlplane",
-            LocalAdminClient.LISTENER_PORT, "9090",
-            LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT");
+    private ManagedKafkaCreateTopicPolicy policy;
+    private Map<String, Object> configs = ImmutableMap.<String, Object>builder()
+            .put(ManagedKafkaCreateTopicPolicy.DEFAULT_REPLICATION_FACTOR, 3)
+            .put(MIN_IN_SYNC_REPLICAS_CONFIG, 2)
+            .put(Config.MAX_PARTITIONS, 1000)
+            .put(Config.LIMIT_ENFORCED, true)
+            .put(Config.PRIVATE_TOPIC_PREFIX, "__kas_")
+            .put(LocalAdminClient.LISTENER_NAME, "controlplane")
+            .put(LocalAdminClient.LISTENER_PORT, "9090")
+            .put(LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT")
+            .put(Config.ENFORCED_VALUE_CONFIGS, "compression.type:producer,unclean.leader.election.enable:false")
+            .put(Config.MUTABLE_CONFIGS, "min.insync.replicas,retention.ms,max.message.bytes,segment.bytes")
+            .put(Config.RANGE_CONFIGS, Config.DEFAULT_RANGE_CONFIGS + ",min.cleanable.dirty.ratio:0.5:0.6")
+            .build();
 
     @BeforeEach
     void setup() {
@@ -51,8 +58,72 @@ class ManagedKafkaCreateTopicPolicyTest {
         assertDoesNotThrow(() -> policy.validate(r));
     }
 
+    @ParameterizedTest
+    @CsvSource({
+            // compression.type only allows default producer as value
+            "compression.type, producer, true",
+            "compression.type, gzip, false",
+            "compression.type, snappy, false",
+            "compression.type, lz4, false",
+            "compression.type, zstd, false",
+            "compression.type, uncompressed, false",
+            // unclean.leader.election.enable only allows default false as value
+            "unclean.leader.election.enable, false, true",
+            "unclean.leader.election.enable, true, false",
+    })
+    void testDefaultConfigValueRules(String configKey, String configVal, boolean isValid) {
+        RequestMetadata r = buildRequest();
+        Mockito.when(r.configs()).thenReturn(Map.of(configKey, configVal));
+        if (isValid) {
+            assertDoesNotThrow(() -> policy.validate(r));
+        } else {
+            assertThrows(PolicyViolationException.class, () -> policy.validate(r));
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "retention.ms, true",
+            "message.format.version, false"
+    })
+    void testImmutableRules(String configKey, boolean isValid) {
+        RequestMetadata r = buildRequest();
+        Mockito.when(r.configs()).thenReturn(Map.of(configKey, "Doesn't matter"));
+        if (isValid) {
+            assertDoesNotThrow(() -> policy.validate(r));
+        } else {
+            assertThrows(PolicyViolationException.class, () -> policy.validate(r));
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            // max.message.bytes allows value less than or equal to 1048588
+            "max.message.bytes, 1048588, true",
+            "max.message.bytes, 0, true",
+            "max.message.bytes, 1048589, false",
+            // max.message.bytes allows value greater than or equal to 52428800
+            "segment.bytes, 52428800, true",
+            "segment.bytes, 52428801, true",
+            "segment.bytes, 0, false",
+            // max.message.bytes allows value between 0.5 and 0.6
+            "min.cleanable.dirty.ratio, 0.6, true",
+            "min.cleanable.dirty.ratio, 0.5, true",
+            "min.cleanable.dirty.ratio, 0.4, false",
+            "min.cleanable.dirty.ratio, 0.7, false",
+    })
+    void testRangeRules(String configKey, String configVal, boolean isValid) {
+        RequestMetadata r = buildRequest();
+        Mockito.when(r.configs()).thenReturn(Map.of(configKey, configVal));
+        if (isValid) {
+            assertDoesNotThrow(() -> policy.validate(r));
+        } else {
+            assertThrows(PolicyViolationException.class, () -> policy.validate(r));
+        }
+    }
+
     @Test
-    void testInValidRF() {
+    void testInvalidRF() {
         RequestMetadata r = buildRequest();
         Mockito.when(r.replicationFactor()).thenReturn((short)2);
         assertThrows(PolicyViolationException.class, () -> policy.validate(r));
@@ -61,21 +132,21 @@ class ManagedKafkaCreateTopicPolicyTest {
     @Test
     void testWhenIsrIsOne() {
         RequestMetadata r = buildRequest();
-        Mockito.when(r.configs()).thenReturn(Map.of(ManagedKafkaCreateTopicPolicy.MIN_INSYNC_REPLICAS, "1"));
+        Mockito.when(r.configs()).thenReturn(Map.of(MIN_IN_SYNC_REPLICAS_CONFIG, "1"));
         assertThrows(PolicyViolationException.class, () -> policy.validate(r));
     }
 
     @Test
     void testIsrGreaterThanDefault() {
         RequestMetadata r = buildRequest();
-        Mockito.when(r.configs()).thenReturn(Map.of(ManagedKafkaCreateTopicPolicy.MIN_INSYNC_REPLICAS, "10"));
+        Mockito.when(r.configs()).thenReturn(Map.of(MIN_IN_SYNC_REPLICAS_CONFIG, "10"));
         assertThrows(PolicyViolationException.class, () -> policy.validate(r));
     }
 
     @Test
     void testIsrSameAsDefault() {
         RequestMetadata r = buildRequest();
-        Mockito.when(r.configs()).thenReturn(Map.of(ManagedKafkaCreateTopicPolicy.MIN_INSYNC_REPLICAS, "2"));
+        Mockito.when(r.configs()).thenReturn(Map.of(MIN_IN_SYNC_REPLICAS_CONFIG, "2"));
         assertDoesNotThrow(() -> policy.validate(r));
     }
 
@@ -149,7 +220,7 @@ class ManagedKafkaCreateTopicPolicyTest {
             Map<String, Object> customConfig = new HashMap<>(configs);
 
             if (!"null".equalsIgnoreCase(featureFlag)) {
-                customConfig.put(PartitionCounter.LIMIT_ENFORCED, featureFlag);
+                customConfig.put(Config.LIMIT_ENFORCED, featureFlag);
             }
 
             policy.configure(customConfig);
@@ -177,7 +248,7 @@ class ManagedKafkaCreateTopicPolicyTest {
     void testTopicValidationBypass(String topicName, int partitions, short replicationFactor, int isr,
             String expectedResult) throws Exception {
         RequestMetadata ctpRequestMetadata = new RequestMetadata(topicName, partitions, replicationFactor, null,
-                Map.of(ManagedKafkaCreateTopicPolicy.MIN_INSYNC_REPLICAS, String.valueOf(isr)));
+                Map.of(MIN_IN_SYNC_REPLICAS_CONFIG, String.valueOf(isr)));
 
         String message = String.format("Test topic name: %s, partitions: %d, replicationFactor: %d, isr: %d, expectedResult %s", topicName, partitions, replicationFactor, isr, expectedResult);
         if ("DENIED".equals(expectedResult)) {

@@ -20,7 +20,7 @@ class PartitionCounterTest {
 
     @Test
     void testGetMaxPartitionsHappyString() {
-        Map<String, ?> config = configWith(Map.of(PartitionCounter.MAX_PARTITIONS, "1000"));
+        Map<String, ?> config = configWith(Map.of(Config.MAX_PARTITIONS, "1000"));
 
         try (PartitionCounter partitionCounter = new PartitionCounter(config)) {
             assertEquals(1000, partitionCounter.getMaxPartitions());
@@ -33,7 +33,7 @@ class PartitionCounterTest {
                 LocalAdminClient.LISTENER_NAME, "controlplane",
                 LocalAdminClient.LISTENER_PORT, "9090",
                 LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT"));
-        config.put(PartitionCounter.MAX_PARTITIONS, null);
+        config.put(Config.MAX_PARTITIONS, null);
         try (PartitionCounter partitionCounter = new PartitionCounter(config)) {
             assertEquals(-1, partitionCounter.getMaxPartitions());
         }
@@ -72,7 +72,7 @@ class PartitionCounterTest {
 
     @Test
     void testIsInternalTopic() {
-        Map<String, ?> config = configWith(Map.of(PartitionCounter.PRIVATE_TOPIC_PREFIX, "__private_"));
+        Map<String, ?> config = configWith(Map.of(Config.PRIVATE_TOPIC_PREFIX, "__private_"));
         try (PartitionCounter partitionCounter = new PartitionCounter(config)) {
             assertTrue(partitionCounter.isInternalTopic("__private_topic1"));
             assertTrue(partitionCounter.isInternalTopic("__consumer_offsets"));
@@ -82,7 +82,7 @@ class PartitionCounterTest {
 
     @Test
     void testIsInternalTopicWithEmptyPrivatePrefix() {
-        Map<String, ?> config = configWith(Map.of(PartitionCounter.PRIVATE_TOPIC_PREFIX, ""));
+        Map<String, ?> config = configWith(Map.of(Config.PRIVATE_TOPIC_PREFIX, ""));
         try (PartitionCounter partitionCounter = new PartitionCounter(config)) {
             assertFalse(partitionCounter.isInternalTopic("__private_topic1"));
             assertTrue(partitionCounter.isInternalTopic("__consumer_offsets"));
@@ -92,7 +92,7 @@ class PartitionCounterTest {
 
     private Map<String, ?> configWith(Map<String, ?> customEntries) {
         Map<String, ?> defaults = Map.of(
-                PartitionCounter.MAX_PARTITIONS, 1000,
+                Config.MAX_PARTITIONS, 1000,
                 LocalAdminClient.LISTENER_NAME, "controlplane",
                 LocalAdminClient.LISTENER_PORT, "9090",
                 LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT");

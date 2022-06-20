@@ -34,7 +34,7 @@ class PartitionCounterIT {
                 final String customPrivateTopicPrefix = "__kas_";
                 List<NewTopic> newTopics = List.of(
                         new NewTopic("topic1", PUBLIC_PARTITION_COUNT / 2, (short) 1),
-                        new NewTopic(PartitionCounter.DEFAULT_NO_PRIVATE_TOPIC_PREFIX + "topic", PUBLIC_PARTITION_COUNT / 2, (short) 1),
+                        new NewTopic(Config.DEFAULT_NO_PRIVATE_TOPIC_PREFIX + "topic", PUBLIC_PARTITION_COUNT / 2, (short) 1),
                         new NewTopic(customPrivateTopicPrefix + "topic", 11, (short) 1),
                         new NewTopic("__consumer_offsets", 12, (short) 1),
                         new NewTopic("__transaction_state", 13, (short) 1));
@@ -44,13 +44,13 @@ class PartitionCounterIT {
                 Map<String, Object> config = Stream.concat(
                         kafkaHelper.consumerConfig().entrySet().stream(),
                         Map.of(
-                                PartitionCounter.PRIVATE_TOPIC_PREFIX, "__kas_",
+                                Config.PRIVATE_TOPIC_PREFIX, "__kas_",
                                 LocalAdminClient.LISTENER_NAME, "test",
                                 LocalAdminClient.LISTENER_PORT, kafkaHelper.kafkaPort(),
                                 LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT").entrySet().stream())
                         .collect(Collectors.toMap(e -> e.getKey().toString(), Entry::getValue));
                 try (PartitionCounter partitionCounter = PartitionCounter.create(config)) {
-                    await().atMost(PartitionCounter.DEFAULT_SCHEDULE_INTERVAL_SECONDS * 2, TimeUnit.SECONDS)
+                    await().atMost(Config.DEFAULT_SCHEDULE_INTERVAL_SECONDS * 2, TimeUnit.SECONDS)
                             .until(() -> partitionCounter.getExistingPartitionCount() == PUBLIC_PARTITION_COUNT);
                 }
             }

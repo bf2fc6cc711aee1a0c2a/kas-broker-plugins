@@ -1,7 +1,6 @@
 package io.bf2.kafka.common;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.bf2.kafka.authorizer.AclLoggingConfig;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.TopicListing;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -27,7 +26,7 @@ import java.util.stream.Collectors;
  * A PartitionCounter counts partitions. It is intended to be used as a shared instance, which
  * schedules partition counting at regular intervals in the background, and exposes a remaining
  * budget of partitions that can be reserved. The budget is the difference between the max
- * partitions (as specified by the {@link #MAX_PARTITIONS} broker property) and the current count of
+ * partitions (as specified by the {@link Config#MAX_PARTITIONS} broker property) and the current count of
  * existing partitions.
  *
  * Expected usage is as follows:
@@ -42,63 +41,10 @@ import java.util.stream.Collectors;
  * </ol>
  */
 public class PartitionCounter implements AutoCloseable {
-
-    private static final String CREATE_TOPIC_POLICY_PREFIX = Config.POLICY_PREFIX + "create-topic.";
-
-    /**
-     * Custom broker property key, used to specify the upper limit of partitions that should be allowed
-     * in the cluster. If this property is not specified, a default of {@link #DEFAULT_MAX_PARTITIONS}
-     * will be used in this class.
-     */
-    public static final String MAX_PARTITIONS = "max.partitions";
-
-    /**
-     * Custom broker property key, used to specify the number of seconds to use as a timeout duration
-     * when listing and describing topics as part of the {@link #countExistingPartitions()} method. If
-     * this property is not specified, a default of {@link #DEFAULT_TIMEOUT_SECONDS} will be used in
-     * this class.
-     */
-    public static final String TIMEOUT_SECONDS = CREATE_TOPIC_POLICY_PREFIX + "partition-counter.timeout-seconds";
-
-    /**
-     * Custom broker property key, used to specify the topic prefix to match for private/internal topics
-     * in the {@link #countExistingPartitions()} method, where partitions from those topics will not be
-     * counted. If this property is not specified, a default of {@link #DEFAULT_NO_PRIVATE_TOPIC_PREFIX}
-     * will be used in this class.
-     */
-    public static final String PRIVATE_TOPIC_PREFIX = CREATE_TOPIC_POLICY_PREFIX + "partition-counter.private-topic-prefix";
-
-    /**
-     * Custom broker property key, used to specify the interval (in seconds) at which to schedule
-     * partition counts. If this property is not specified, a default of
-     * {@link #DEFAULT_SCHEDULE_INTERVAL_SECONDS} will be used in this class.
-     */
-    public static final String SCHEDULE_INTERVAL_SECONDS = CREATE_TOPIC_POLICY_PREFIX + "partition-counter.schedule-interval-seconds";
-
-    /**
-     * Feature flag broker property key to allow disabling of partition limit enforcement. If this
-     * property is not specified, a default of {@link #DEFAULT_LIMIT_ENFORCED} will be returned through
-     * the {@link #isLimitEnforced()} method.
-     */
-    public static final String LIMIT_ENFORCED = CREATE_TOPIC_POLICY_PREFIX + "partition-limit-enforced";
-
-    static final int DEFAULT_MAX_PARTITIONS = -1;
-    static final int DEFAULT_TIMEOUT_SECONDS = 10;
-    static final int DEFAULT_SCHEDULE_INTERVAL_SECONDS = 15;
-    static final String DEFAULT_NO_PRIVATE_TOPIC_PREFIX = "";
-    static final boolean DEFAULT_LIMIT_ENFORCED = false;
-
     private static final String GROUP_METADATA_TOPIC_NAME = "__consumer_offsets";
     private static final String TRANSACTION_STATE_TOPIC_NAME = "__transaction_state";
 
-    private static final ConfigDef configDef = new ConfigDef()
-            .define(LIMIT_ENFORCED, ConfigDef.Type.BOOLEAN, DEFAULT_LIMIT_ENFORCED, ConfigDef.Importance.MEDIUM, "Feature flag to allow enabling of partition limit enforcement")
-            .define(MAX_PARTITIONS, ConfigDef.Type.INT, DEFAULT_MAX_PARTITIONS, ConfigDef.Importance.MEDIUM, "Max partitions")
-            .define(PRIVATE_TOPIC_PREFIX, ConfigDef.Type.STRING, DEFAULT_NO_PRIVATE_TOPIC_PREFIX, ConfigDef.Importance.MEDIUM, "Internal Partition Prefix")
-            .define(TIMEOUT_SECONDS, ConfigDef.Type.INT, DEFAULT_TIMEOUT_SECONDS,ConfigDef.Importance.MEDIUM, "Timeout duration for listing and describing topics")
-            .define(SCHEDULE_INTERVAL_SECONDS, ConfigDef.Type.INT, DEFAULT_SCHEDULE_INTERVAL_SECONDS,ConfigDef.Importance.MEDIUM, "Schedule interval for scheduled counter");
-
-    private static final Logger log = LoggerFactory.getLogger(AclLoggingConfig.class);
+    private static final Logger log = LoggerFactory.getLogger(PartitionCounter.class);
 
     private static volatile PartitionCounter partitionCounter;
     private static final AtomicInteger handles = new AtomicInteger();
@@ -155,17 +101,17 @@ public class PartitionCounter implements AutoCloseable {
     }
 
     PartitionCounter(Map<String, ?> config) {
-        AbstractConfig parsedConfig = new AbstractConfig(configDef, config);
+        AbstractConfig parsedConfig = new AbstractConfig(Config.PARTITION_COUNTER_CONFIG_DEF, config);
 
         admin = LocalAdminClient.create(config);
         existingPartitionCount = new AtomicInteger(0);
         remainingPartitionBudget = new AtomicInteger(0);
 
-        requestTimeout = parsedConfig.getInt(TIMEOUT_SECONDS);
+        requestTimeout = parsedConfig.getInt(Config.TIMEOUT_SECONDS);
         maxPartitions = getMaxPartitionsFromConfig(parsedConfig);
-        privateTopicPrefix = parsedConfig.getString(PRIVATE_TOPIC_PREFIX);
-        scheduleIntervalSeconds = parsedConfig.getInt(SCHEDULE_INTERVAL_SECONDS);
-        limitEnforced = parsedConfig.getBoolean(LIMIT_ENFORCED);
+        privateTopicPrefix = parsedConfig.getString(Config.PRIVATE_TOPIC_PREFIX);
+        scheduleIntervalSeconds = parsedConfig.getInt(Config.SCHEDULE_INTERVAL_SECONDS);
+        limitEnforced = parsedConfig.getBoolean(Config.LIMIT_ENFORCED);
 
         ThreadFactory threadFactory =
                 new ThreadFactoryBuilder().setNameFormat("partition-counter").setDaemon(true).build();
@@ -202,15 +148,23 @@ public class PartitionCounter implements AutoCloseable {
     }
 
     /**
-     * @return the value of the {@link #MAX_PARTITIONS} key in the broker configs, or a default of
-     *         {@link #DEFAULT_MAX_PARTITIONS} if not set.
+     * @return the value of the {@link Config#MAX_PARTITIONS} key in the broker configs, or a default of
+     *         {@link Config#DEFAULT_MAX_PARTITIONS} if not set.
      */
     public int getMaxPartitions() {
         return maxPartitions;
     }
 
     /**
-     * @return true if the {@link #LIMIT_ENFORCED} property is explicitly set to true, else false.
+     * @return the value of the {@link Config#PRIVATE_TOPIC_PREFIX} key in the broker configs, or a default of
+     *         {@link Config#DEFAULT_PRIVATE_TOPIC_PREFIX} if not set.
+     */
+    public String getPrivateTopicPrefix() {
+        return privateTopicPrefix;
+    }
+
+    /**
+     * @return true if the {@link Config#LIMIT_ENFORCED} property is explicitly set to true, else false.
      */
     public boolean isLimitEnforced() {
         return limitEnforced;
@@ -232,8 +186,8 @@ public class PartitionCounter implements AutoCloseable {
      *                              describing topics.
      * @throws TimeoutException     if the list or describe topic operations timed out. The timeout
      *                              duration used for each is the number of seconds specified in the
-     *                              broker property specified by the value of {@link #TIMEOUT_SECONDS},
-     *                              falling back to a default of {@link #DEFAULT_TIMEOUT_SECONDS} if not
+     *                              broker property specified by the value of {@link Config#TIMEOUT_SECONDS},
+     *                              falling back to a default of {@link Config#DEFAULT_TIMEOUT_SECONDS} if not
      *                              set.
      */
     public int countExistingPartitions() throws InterruptedException, ExecutionException, TimeoutException {
@@ -255,16 +209,20 @@ public class PartitionCounter implements AutoCloseable {
     }
 
     public boolean isInternalTopic(String name) {
-        return  GROUP_METADATA_TOPIC_NAME.equals(name)
+        return isInternalTopic(name, privateTopicPrefix);
+    }
+
+    public static boolean isInternalTopic(String name, String privateTopicPrefix) {
+        return GROUP_METADATA_TOPIC_NAME.equals(name)
                 || TRANSACTION_STATE_TOPIC_NAME.equals(name)
-                || (!"".equals(privateTopicPrefix) && name.startsWith(privateTopicPrefix));
+                || (!privateTopicPrefix.isBlank() && name.startsWith(privateTopicPrefix));
     }
 
     private static int getMaxPartitionsFromConfig(AbstractConfig config) {
         try {
-            return config.getInt(MAX_PARTITIONS);
+            return config.getInt(Config.MAX_PARTITIONS);
         } catch (ConfigException | NullPointerException | NumberFormatException e) {
-            log.warn("An invalid or absent value was provided for " + MAX_PARTITIONS + " in the broker configs."
+            log.warn("An invalid or absent value was provided for " + Config.MAX_PARTITIONS + " in the broker configs."
                     + " A value of -1 will be used to indicate that no max will be enforced.");
             return -1;
         }
