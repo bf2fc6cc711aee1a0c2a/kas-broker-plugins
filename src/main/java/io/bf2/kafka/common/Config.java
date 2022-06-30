@@ -64,6 +64,13 @@ public class Config {
     public static final String RANGE_CONFIGS = ALTER_CONFIG_POLICY_PREFIX + "range";
     public static final String RANGE_CONFIGS_DOC = "This is used to specify the configs that allow values within a range with the format 'configA:minA:maxA,configB:minB:maxB,....'.";
 
+    /**
+     * Feature flag broker property key to allow enabling/disabling of topic config policies. If this
+     * property is not specified, a default of {@code false} will be set
+     */
+    public static final String TOPIC_CONFIG_POLICY_ENFORCED = ALTER_CONFIG_POLICY_PREFIX + "topic-config-policy-enforced";
+    public static final String TOPIC_CONFIG_POLICY_ENFORCED_DOC = "Feature flag to allow enabling or disabling of topic config policies";
+
     public static final Set<String> DEFAULT_ENFORCED_VALUE_SET = Set.of(
             COMPRESSION_TYPE_CONFIG + ":producer",
             FILE_DELETE_DELAY_MS_CONFIG + ":60000",
@@ -117,7 +124,8 @@ public class Config {
     public static final ConfigDef TOPIC_POLICY_CONFIG_DEF = new ConfigDef()
             .define(ENFORCED_VALUE_CONFIGS, ConfigDef.Type.LIST, DEFAULT_CONFIG_VALUE_CONFIGS, ConfigDef.Importance.MEDIUM, ENFORCED_VALUE_CONFIGS_DOC)
             .define(MUTABLE_CONFIGS, ConfigDef.Type.LIST, DEFAULT_MUTABLE_CONFIGS, ConfigDef.Importance.MEDIUM, MUTABLE_CONFIGS_DOC)
-            .define(RANGE_CONFIGS, ConfigDef.Type.LIST, DEFAULT_RANGE_CONFIGS, ConfigDef.Importance.MEDIUM, RANGE_CONFIGS_DOC);
+            .define(RANGE_CONFIGS, ConfigDef.Type.LIST, DEFAULT_RANGE_CONFIGS, ConfigDef.Importance.MEDIUM, RANGE_CONFIGS_DOC)
+            .define(TOPIC_CONFIG_POLICY_ENFORCED, ConfigDef.Type.BOOLEAN, false, ConfigDef.Importance.MEDIUM, TOPIC_CONFIG_POLICY_ENFORCED_DOC);
 
     // ===== end of topic policy configs definition =====
 

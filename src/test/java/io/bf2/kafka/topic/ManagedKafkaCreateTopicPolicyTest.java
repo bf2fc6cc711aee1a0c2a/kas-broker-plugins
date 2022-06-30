@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import io.bf2.kafka.common.Config;
 import io.bf2.kafka.common.LocalAdminClient;
 import io.bf2.kafka.common.PartitionCounter;
+import io.bf2.kafka.config.ManagedKafkaAlterConfigPolicy;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy.RequestMetadata;
 import org.junit.jupiter.api.AfterEach;
@@ -27,7 +28,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ManagedKafkaCreateTopicPolicyTest {
     private ManagedKafkaCreateTopicPolicy policy;
-    private Map<String, Object> configs = ImmutableMap.<String, Object>builder()
+    private ManagedKafkaCreateTopicPolicy disabledPolicy;
+    private Map<String, Object> disabledConfigs = ImmutableMap.<String, Object>builder()
             .put(ManagedKafkaCreateTopicPolicy.DEFAULT_REPLICATION_FACTOR, 3)
             .put(MIN_IN_SYNC_REPLICAS_CONFIG, 2)
             .put(Config.MAX_PARTITIONS, 1000)
@@ -40,11 +42,17 @@ class ManagedKafkaCreateTopicPolicyTest {
             .put(Config.MUTABLE_CONFIGS, "min.insync.replicas,retention.ms,max.message.bytes,segment.bytes")
             .put(Config.RANGE_CONFIGS, Config.DEFAULT_RANGE_CONFIGS + ",min.cleanable.dirty.ratio:0.5:0.6")
             .build();
+    private Map<String, Object> configs = ImmutableMap.<String, Object>builder()
+            .putAll(disabledConfigs)
+            .put(Config.TOPIC_CONFIG_POLICY_ENFORCED, true)
+            .build();
 
     @BeforeEach
     void setup() {
         policy = new ManagedKafkaCreateTopicPolicy();
+        disabledPolicy = new ManagedKafkaCreateTopicPolicy();
         policy.configure(configs);
+        disabledPolicy.configure(disabledConfigs);
     }
 
     @AfterEach
@@ -79,6 +87,8 @@ class ManagedKafkaCreateTopicPolicyTest {
         } else {
             assertThrows(PolicyViolationException.class, () -> policy.validate(r));
         }
+        // since policy is disabled, we should not throw exception no matter what config provided
+        assertDoesNotThrow(() -> disabledPolicy.validate(r));
     }
 
     @ParameterizedTest
@@ -94,6 +104,8 @@ class ManagedKafkaCreateTopicPolicyTest {
         } else {
             assertThrows(PolicyViolationException.class, () -> policy.validate(r));
         }
+        // since policy is disabled, we should not throw exception no matter what config provided
+        assertDoesNotThrow(() -> disabledPolicy.validate(r));
     }
 
     @ParameterizedTest
@@ -120,6 +132,8 @@ class ManagedKafkaCreateTopicPolicyTest {
         } else {
             assertThrows(PolicyViolationException.class, () -> policy.validate(r));
         }
+        // since policy is disabled, we should not throw exception no matter what config provided
+        assertDoesNotThrow(() -> disabledPolicy.validate(r));
     }
 
     @Test

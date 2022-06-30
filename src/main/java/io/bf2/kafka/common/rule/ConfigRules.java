@@ -21,24 +21,34 @@ public class ConfigRules {
     private final Map<String, String> enforcedConfigs;
     private final Set<String> mutableConfigs;
     private final Map<String, Range<Double>> rangeConfigs;
+    private final boolean isTopicConfigPolicyEnabled;
 
     public ConfigRules(Map<String, ?> configs) {
         AbstractConfig parsedConfig = new AbstractConfig(Config.TOPIC_POLICY_CONFIG_DEF, configs);
 
-        enforcedConfigs = parseListToMap(Config.ENFORCED_VALUE_CONFIGS, parsedConfig.getList(Config.ENFORCED_VALUE_CONFIGS));
-        rangeConfigs = parseListToRangeMap(Config.RANGE_CONFIGS, parsedConfig.getList(Config.RANGE_CONFIGS));
+        isTopicConfigPolicyEnabled = parsedConfig.getBoolean(Config.TOPIC_CONFIG_POLICY_ENFORCED);
+        if (isTopicConfigPolicyEnabled) {
+            enforcedConfigs = parseListToMap(Config.ENFORCED_VALUE_CONFIGS, parsedConfig.getList(Config.ENFORCED_VALUE_CONFIGS));
+            rangeConfigs = parseListToRangeMap(Config.RANGE_CONFIGS, parsedConfig.getList(Config.RANGE_CONFIGS));
 
-        // mutable configs should be the union of all config keys
-        mutableConfigs = ImmutableSet.<String>builder()
-                .addAll(Set.copyOf(parsedConfig.getList(Config.MUTABLE_CONFIGS)))
-                .addAll(enforcedConfigs.keySet())
-                .addAll(rangeConfigs.keySet())
-                .build();
+            // mutable configs should be the union of all config keys
+            mutableConfigs = ImmutableSet.<String>builder()
+                    .addAll(Set.copyOf(parsedConfig.getList(Config.MUTABLE_CONFIGS)))
+                    .addAll(enforcedConfigs.keySet())
+                    .addAll(rangeConfigs.keySet())
+                    .build();
 
-        configRules = Set.of(
-                new EnforcedRule(enforcedConfigs),
-                new ImmutableRule(mutableConfigs),
-                new RangeRule(rangeConfigs));
+            configRules = Set.of(
+                    new EnforcedRule(enforcedConfigs),
+                    new ImmutableRule(mutableConfigs),
+                    new RangeRule(rangeConfigs));
+        } else {
+            // No need to store configs and create config rules when policy disabled
+            enforcedConfigs = Collections.emptyMap();
+            rangeConfigs = Collections.emptyMap();
+            mutableConfigs = Collections.emptySet();
+            configRules = Collections.emptySet();
+        }
     }
 
     public Map<String, String> getEnforcedConfigs() {
@@ -53,7 +63,15 @@ public class ConfigRules {
         return mutableConfigs;
     }
 
+    public boolean getIsTopicConfigPolicyEnabled() {
+        return isTopicConfigPolicyEnabled;
+    }
+
     public void validateTopicConfigs(String topic, Map<String, String> configs) {
+        if (!isTopicConfigPolicyEnabled) {
+            return;
+        }
+
         Set<String> invalidConfigMsgs = new HashSet<>();
         for (Map.Entry<String, String> entry: configs.entrySet()) {
             for (ConfigRule rule : configRules) {
