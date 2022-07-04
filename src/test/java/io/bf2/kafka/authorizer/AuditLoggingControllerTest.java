@@ -2,6 +2,7 @@ package io.bf2.kafka.authorizer;
 
 import com.google.common.collect.Maps;
 import io.bf2.kafka.authorizer.VerifiableAppenderExtension.LoggedEvents;
+import io.bf2.kafka.authorizer.VerifiableAppenderExtension.LoggerName;
 import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.resource.PatternType;
@@ -44,8 +45,8 @@ class AuditLoggingControllerTest {
     }
 
     @BeforeEach
-    void setUp() {
-        auditLoggingController = new AuditLoggingController();
+    void setUp(@LoggerName String loggerName) {
+        auditLoggingController = new AuditLoggingController(loggerName);
         auditLoggingController.configure(config);
 
         assertEquals(2, auditLoggingController.aclLoggingMap.size(), "failed to parse Logging config correctly");
@@ -330,12 +331,13 @@ class AuditLoggingControllerTest {
     @Test
     void shouldAllowShutdownBeforeConfigured() {
         //Given
-        final AuditLoggingController freshController = new AuditLoggingController();
+        try (AuditLoggingController freshController = new AuditLoggingController("AuditEvents")) {
 
-        //When
-        assertDoesNotThrow(freshController::close);
+            //When
+            assertDoesNotThrow(freshController::close);
 
-        //Then
+            //Then
+        }
     }
 
     @Test
