@@ -58,6 +58,7 @@ class ManagedKafkaCreateTopicPolicyTest {
     @AfterEach
     void tearDown() {
         policy.close();
+        disabledPolicy.close();
     }
 
     @Test
