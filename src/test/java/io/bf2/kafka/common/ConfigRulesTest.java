@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -18,10 +20,22 @@ class ConfigRulesTest {
     private ConfigRules defaultConfigRules = new ConfigRules(configWith(Collections.emptyMap()));
 
     @Test
-    void testGetDefaultRuleConfigs() {
-        assertEquals(defaultConfigRules.parseListToMap(DUMMY_CONFIG_KEY, List.copyOf(Config.DEFAULT_ENFORCED_VALUE_SET)), defaultConfigRules.getEnforcedConfigs());
-        assertEquals(Config.DEFAULT_MUTABLE_CONFIG_KEYS, defaultConfigRules.getMutableConfigs());
-        assertEquals(defaultConfigRules.parseListToRangeMap(DUMMY_CONFIG_KEY, List.copyOf(Config.DEFAULT_RANGE_CONFIG_SET)), defaultConfigRules.getRangeConfigs());
+    void testGetDefaultRuleConfigsWithPolicyDisabled() {
+        assertEquals(Collections.emptyMap(), defaultConfigRules.getEnforcedConfigs());
+        assertEquals(Collections.emptySet(), defaultConfigRules.getMutableConfigs());
+        assertEquals(Collections.emptyMap(), defaultConfigRules.getRangeConfigs());
+        assertFalse(defaultConfigRules.getIsTopicConfigPolicyEnabled());
+    }
+
+    @Test
+    void testGetDefaultRuleConfigsWithPolicyEnabled() {
+        Map<String, ?> config = configWith(Map.of(Config.TOPIC_CONFIG_POLICY_ENFORCED, true));
+
+        ConfigRules configRules = new ConfigRules(config);
+        assertEquals(defaultConfigRules.parseListToMap(DUMMY_CONFIG_KEY, List.copyOf(Config.DEFAULT_ENFORCED_VALUE_SET)), configRules.getEnforcedConfigs());
+        assertEquals(Config.DEFAULT_MUTABLE_CONFIG_KEYS, configRules.getMutableConfigs());
+        assertEquals(defaultConfigRules.parseListToRangeMap(DUMMY_CONFIG_KEY, List.copyOf(Config.DEFAULT_RANGE_CONFIG_SET)), configRules.getRangeConfigs());
+        assertTrue(configRules.getIsTopicConfigPolicyEnabled());
     }
 
     @Test
@@ -29,7 +43,8 @@ class ConfigRulesTest {
         Map<String, ?> config = configWith(Map.of(
                 Config.ENFORCED_VALUE_CONFIGS, "min.compaction.lag.ms:0",
                 Config.RANGE_CONFIGS, "retention.ms::604800000,min.cleanable.dirty.ratio:0.5:,segment.index.bytes:1000:10000",
-                Config.MUTABLE_CONFIGS, "compression.type"));
+                Config.MUTABLE_CONFIGS, "compression.type",
+                Config.TOPIC_CONFIG_POLICY_ENFORCED, true));
 
         ConfigRules configRules = new ConfigRules(config);
         assertEquals(Map.of("min.compaction.lag.ms", "0"), configRules.getEnforcedConfigs());
@@ -48,7 +63,8 @@ class ConfigRulesTest {
         Map<String, ?> config = configWith(Map.of(
                 Config.ENFORCED_VALUE_CONFIGS, "min.compaction.lag.ms:0",
                 Config.RANGE_CONFIGS, "retention.ms::604800000",
-                Config.MUTABLE_CONFIGS, "compression.type"));
+                Config.MUTABLE_CONFIGS, "compression.type",
+                Config.TOPIC_CONFIG_POLICY_ENFORCED, true));
 
         ConfigRules configRules = new ConfigRules(config);
         assertEquals(Set.of("compression.type", "min.compaction.lag.ms", "retention.ms"), configRules.getMutableConfigs());
@@ -59,7 +75,8 @@ class ConfigRulesTest {
         Map<String, ?> config = configWith(Map.of(
                 Config.ENFORCED_VALUE_CONFIGS, "retention.ms:604800000",
                 Config.MUTABLE_CONFIGS, "retention.ms",
-                Config.RANGE_CONFIGS, ""));
+                Config.RANGE_CONFIGS, "",
+                Config.TOPIC_CONFIG_POLICY_ENFORCED, true));
 
         ConfigRules configRules = new ConfigRules(config);
         assertEquals(Map.of("retention.ms", "604800000"), configRules.getEnforcedConfigs());

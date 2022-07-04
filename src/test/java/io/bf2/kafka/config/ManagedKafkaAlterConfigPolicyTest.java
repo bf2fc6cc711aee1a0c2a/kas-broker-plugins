@@ -1,5 +1,6 @@
 package io.bf2.kafka.config;
 
+import com.google.common.collect.ImmutableMap;
 import io.bf2.kafka.common.Config;
 import io.bf2.kafka.common.LocalAdminClient;
 import org.apache.kafka.common.config.ConfigResource;
@@ -21,26 +22,35 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 class ManagedKafkaAlterConfigPolicyTest {
     private static final String TOPIC_NAME = "test";
     private ManagedKafkaAlterConfigPolicy policy;
-    private Map<String, Object> configs = Map.of(
+    private ManagedKafkaAlterConfigPolicy disabledPolicy;
+    private Map<String, Object> disabledConfigs = Map.of(
             Config.ENFORCED_VALUE_CONFIGS, "compression.type:producer,unclean.leader.election.enable:false",
             Config.MUTABLE_CONFIGS, "retention.ms,max.message.bytes,segment.bytes",
             Config.RANGE_CONFIGS, Config.DEFAULT_RANGE_CONFIGS + ",min.cleanable.dirty.ratio:0.5:0.6");
+    private Map<String, Object> configs = ImmutableMap.<String, Object>builder()
+            .putAll(disabledConfigs)
+            .put(Config.TOPIC_CONFIG_POLICY_ENFORCED, true)
+            .build();
 
     @BeforeEach
     void setup() {
         policy = new ManagedKafkaAlterConfigPolicy();
         policy.configure(configs);
+        disabledPolicy = new ManagedKafkaAlterConfigPolicy();
+        disabledPolicy.configure(disabledConfigs);
     }
 
     @AfterEach
     void tearDown() {
         policy.close();
+        disabledPolicy.close();
     }
 
     @Test
     void testValidateDefaults() {
         RequestMetadata r = buildRequest();
         assertDoesNotThrow(() -> policy.validate(r));
+        assertDoesNotThrow(() -> disabledPolicy.validate(r));
     }
     @ParameterizedTest
     @CsvSource({
@@ -54,6 +64,7 @@ class ManagedKafkaAlterConfigPolicyTest {
             // unclean.leader.election.enable only allows default false as value
             "unclean.leader.election.enable, false, true",
             "unclean.leader.election.enable, true, false",
+            "unclean.leader.election.enable, true, false",
     })
     void testEnforcedValueRules(String configKey, String configVal, boolean isValid) {
         RequestMetadata r = buildRequest();
@@ -63,6 +74,8 @@ class ManagedKafkaAlterConfigPolicyTest {
         } else {
             assertThrows(PolicyViolationException.class, () -> policy.validate(r));
         }
+        // since policy is disabled, we should not throw exception no matter what config provided
+        assertDoesNotThrow(() -> disabledPolicy.validate(r));
     }
 
     @ParameterizedTest
@@ -79,6 +92,8 @@ class ManagedKafkaAlterConfigPolicyTest {
         } else {
             assertThrows(PolicyViolationException.class, () -> policy.validate(r));
         }
+        // since policy is disabled, we should not throw exception no matter what config provided
+        assertDoesNotThrow(() -> disabledPolicy.validate(r));
     }
 
     @ParameterizedTest
@@ -105,6 +120,8 @@ class ManagedKafkaAlterConfigPolicyTest {
         } else {
             assertThrows(PolicyViolationException.class, () -> policy.validate(r));
         }
+        // since policy is disabled, we should not throw exception no matter what config provided
+        assertDoesNotThrow(() -> disabledPolicy.validate(r));
     }
 
     private RequestMetadata buildRequest() {
