@@ -143,6 +143,8 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <redirectTestOutputToFile>true</redirectTestOutputToFile>
+                    <useUnlimitedThreads>false</useUnlimitedThreads>
+                    <forkCount>1</forkCount>
                 </configuration>
             </plugin>
             <plugin>
