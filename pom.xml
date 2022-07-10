@@ -43,7 +43,7 @@
         <slf4j.version>1.7.30</slf4j.version>
         <guava.version>30.0-jre</guava.version>
         <zookeeper.version>3.6.3</zookeeper.version>
-        <kafka-junit.version>4.2.2</kafka-junit.version>
+        <kafka-junit.version>4.2.1</kafka-junit.version>
         <curator-test.version>5.2.0</curator-test.version>
         <awaitility.version>4.2.0</awaitility.version>
     </properties>
