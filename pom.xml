@@ -143,9 +143,13 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <redirectTestOutputToFile>true</redirectTestOutputToFile>
-                    <useUnlimitedThreads>false</useUnlimitedThreads>
+                    <useUnlimitedThreads>true</useUnlimitedThreads>
+                    <parallel>all</parallel>
+                    <useUnlimitedThreads>true</useUnlimitedThreads>
                     <forkCount>1</forkCount>
+                    <reuseForks>true</reuseForks>
                     <forkedProcessTimeoutInSeconds>90</forkedProcessTimeoutInSeconds>
+                    <forkedProcessExitTimeoutInSeconds>90</forkedProcessExitTimeoutInSeconds>
                 </configuration>
             </plugin>
             <plugin>
