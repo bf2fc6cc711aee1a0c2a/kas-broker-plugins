@@ -5,13 +5,17 @@ import com.google.common.collect.Range;
 import io.bf2.kafka.common.Config;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.errors.PolicyViolationException;
+import org.apache.kafka.server.policy.CreateTopicPolicy;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+
+import static org.apache.kafka.common.config.TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG;
 
 /**
  * A class that parses the user provided rule configs to create all rules, and validates the provided configs.
@@ -84,7 +88,6 @@ public class ConfigRules {
                     String.format("Invalid config specified for topic %s. The violating configs are: %s", topic, invalidConfigMsgs));
         }
     }
-
 
     /**
      * This method gets a list of values which contains key,value pairs and returns a map of

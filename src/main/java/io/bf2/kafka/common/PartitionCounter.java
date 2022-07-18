@@ -157,7 +157,7 @@ public class PartitionCounter implements AutoCloseable {
 
     /**
      * @return the value of the {@link Config#PRIVATE_TOPIC_PREFIX} key in the broker configs, or a default of
-     *         {@link Config#DEFAULT_PRIVATE_TOPIC_PREFIX} if not set.
+     *         {@link Config#DEFAULT_NO_PRIVATE_TOPIC_PREFIX} if not set.
      */
     public String getPrivateTopicPrefix() {
         return privateTopicPrefix;
