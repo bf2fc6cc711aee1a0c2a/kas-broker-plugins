@@ -19,8 +19,8 @@ kas-broker-plugins has no affiliation with and is not endorsed by The Apache Sof
 Currently included here are:
 
 - `io.bf2.kafka.authorizer.CustomAclAuthorizer` - an https://kafka.apache.org/documentation/#security_authz[Authorizer] implementation
-- `io.bf2.kafka.topic.ManagedKafkaCreateTopicPolicy` - a https://cwiki.apache.org/confluence/display/KAFKA/KIP-108%3A+Create+Topic+Policy[CreateTopicPolicy] implementation
-- `io.bf2.kafka.config.ManagedKafkaAlterConfigPolicy` - a https://cwiki.apache.org/confluence/display/KAFKA/KIP-133%3A+Describe+and+Alter+Configs+Admin+APIs#KIP133:DescribeandAlterConfigsAdminAPIs-AlterConfigs[AlterConfigPolicy] implementation
+- `io.bf2.kafka.topic.ManagedKafkaCreateTopicPolicy` - an https://cwiki.apache.org/confluence/display/KAFKA/KIP-108%3A+Create+Topic+Policy[CreateTopicPolicy] implementation
+- `io.bf2.kafka.config.ManagedKafkaAlterConfigPolicy` - an https://cwiki.apache.org/confluence/display/KAFKA/KIP-133%3A+Describe+and+Alter+Configs+Admin+APIs#KIP133:DescribeandAlterConfigsAdminAPIs-AlterConfigs[AlterConfigPolicy] implementation
 
 == CustomAclAuthorizer
 
@@ -100,6 +100,18 @@ The objective of this policy is to:
 * validate number of partitions in the cluster
 * validate the create topic configs
 
+Here are the configuration description:
+
+* `kas.policy.create-topic.max.partitions`: Used to specify the upper limit of partitions that should be allowed in the cluster. If this property is not specified, a default of -1 (no limit) is set
+* `kas.policy.create-topic.partition-counter.timeout-seconds`: Used to specify the number of seconds to use as a timeout duration when listing and describing topics method. Default is 10.
+* `kas.policy.create-topic.partition-counter.private-topic-prefix`: Used to specify the topic prefix to match for private/internal topics. Default is no prefix.
+* `kas.policy.create-topic.partition-counter.schedule-interval-seconds`: Used to specify the interval (in seconds) at which to schedule partition counts. Default is 15.
+* `kas.policy.create-topic.partition-limit-enforced`: Used to allow disabling of partition limit enforcement. Default is false.
+* `kas.policy.topic-config.enforced`: Used to specify the configs with permitted value. It's a list in the form [keyA]:[valueA],[keyB]:[valueB]. Default value is: "flush.ms:9223372036854775807,index.interval.bytes:4096,compression.type:producer,flush.messages:9223372036854775807,segment.jitter.ms:0,min.cleanable.dirty.ratio:0.5,file.delete.delay.ms:60000,segment.index.bytes:10485760,preallocate:false,unclean.leader.election.enable:false"
+* `kas.policy.topic-config.mutable`: Used to specify the configs that allow to be updated. It's a comma separated list. We'll merge everything in kas.policy.topic-config.enforced and kas.policy.topic-config.range config. Default value is: "message.timestamp.difference.max.ms,message.timestamp.type,retention.bytes,min.compaction.lag.ms,cleanup.policy,max.compaction.lag.ms,delete.retention.ms,message.downconversion.enable"
+* `kas.policy.topic-config.range`: Used to specify the configs that allow values within a range with the format "configA:minA:maxA,configB:minB:maxB,...". Either min or max can be empty, which means we only set lower/upper bound. Default value is: "max.message.bytes::1048588,segment.bytes:52428800:,segment.ms:600000:"
+
+=== Configuring the policies
 To config the create topic policy, you should add config in Strimzi's Kafka CR.
 A sample CR fragment looks like:
 
@@ -121,17 +133,6 @@ kafka:
       kas.policy.topic-config.mutable=cleanup.policy,delete.retention.ms,retention.bytes,retention.ms
       kas.policy.topic-config.range=segment.bytes:52428800:,segment.ms:600000:
 ----
-
-Here are the configuration description:
-
-* `kas.policy.create-topic.max.partitions`: Used to specify the upper limit of partitions that should be allowed in the cluster. If this property is not specified, a default of -1 (no limit) is set
-* `kas.policy.create-topic.partition-counter.timeout-seconds`: Used to specify the number of seconds to use as a timeout duration when listing and describing topics method. Default is 10.
-* `kas.policy.create-topic.partition-counter.private-topic-prefix`: Used to specify the topic prefix to match for private/internal topics. Default is no prefix.
-* `kas.policy.create-topic.partition-counter.schedule-interval-seconds`: Used to specify the interval (in seconds) at which to schedule partition counts. Default is 15.
-* `kas.policy.create-topic.partition-limit-enforced`: Used to allow disabling of partition limit enforcement. Default is false.
-* `kas.policy.topic-config.enforced`: Used to specify the configs with permitted value. It's a list in the form [keyA]:[valueA],[keyB]:[valueB]. Default value is: "flush.ms:9223372036854775807,index.interval.bytes:4096,compression.type:producer,flush.messages:9223372036854775807,segment.jitter.ms:0,min.cleanable.dirty.ratio:0.5,file.delete.delay.ms:60000,segment.index.bytes:10485760,preallocate:false,unclean.leader.election.enable:false"
-* `kas.policy.topic-config.mutable`: Used to specify the configs that allow to be updated. It's a comma separated list. We'll merge everything in kas.policy.topic-config.enforced and kas.policy.topic-config.range config. Default value is: "message.timestamp.difference.max.ms,message.timestamp.type,retention.bytes,min.compaction.lag.ms,cleanup.policy,max.compaction.lag.ms,delete.retention.ms,message.downconversion.enable"
-* `kas.policy.topic-config.range`: Used to specify the configs that allow values within a range with the format "configA:minA:maxA,configB:minB:maxB,...". Either min or max can be empty, which means we only set lower/upper bound. Default value is: "max.message.bytes::1048588,segment.bytes:52428800:,segment.ms:600000:"
 
 == ManagedKafkaAlterConfigPolicy
 

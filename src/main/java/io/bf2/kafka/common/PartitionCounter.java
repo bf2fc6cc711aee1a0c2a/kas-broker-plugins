@@ -4,7 +4,6 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.TopicListing;
 import org.apache.kafka.common.config.AbstractConfig;
-import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -157,7 +156,7 @@ public class PartitionCounter implements AutoCloseable {
 
     /**
      * @return the value of the {@link Config#PRIVATE_TOPIC_PREFIX} key in the broker configs, or a default of
-     *         {@link Config#DEFAULT_NO_PRIVATE_TOPIC_PREFIX} if not set.
+     *         {@link Config#DEFAULT_PRIVATE_TOPIC_PREFIX} if not set.
      */
     public String getPrivateTopicPrefix() {
         return privateTopicPrefix;

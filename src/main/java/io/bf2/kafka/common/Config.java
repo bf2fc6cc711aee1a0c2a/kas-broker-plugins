@@ -1,10 +1,7 @@
 package io.bf2.kafka.common;
 
-import kafka.server.KafkaConfig;
 import org.apache.kafka.common.config.ConfigDef;
 
-import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import static org.apache.kafka.common.config.TopicConfig.CLEANUP_POLICY_CONFIG;
@@ -21,7 +18,6 @@ import static org.apache.kafka.common.config.TopicConfig.MESSAGE_TIMESTAMP_DIFFE
 import static org.apache.kafka.common.config.TopicConfig.MESSAGE_TIMESTAMP_TYPE_CONFIG;
 import static org.apache.kafka.common.config.TopicConfig.MIN_CLEANABLE_DIRTY_RATIO_CONFIG;
 import static org.apache.kafka.common.config.TopicConfig.MIN_COMPACTION_LAG_MS_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG;
 import static org.apache.kafka.common.config.TopicConfig.PREALLOCATE_CONFIG;
 import static org.apache.kafka.common.config.TopicConfig.RETENTION_BYTES_CONFIG;
 import static org.apache.kafka.common.config.TopicConfig.RETENTION_MS_CONFIG;
@@ -110,8 +106,7 @@ public class Config {
             SEGMENT_JITTER_MS_CONFIG,
             SEGMENT_MS_CONFIG,
             UNCLEAN_LEADER_ELECTION_ENABLE_CONFIG,
-            MESSAGE_DOWNCONVERSION_ENABLE_CONFIG,
-            MIN_IN_SYNC_REPLICAS_CONFIG
+            MESSAGE_DOWNCONVERSION_ENABLE_CONFIG
     );
 
     public static final String DEFAULT_MAX_MESSAGE_BYTES= "1048588";
@@ -140,14 +135,14 @@ public class Config {
     public static final int DEFAULT_MAX_PARTITIONS = -1;
     public static final int DEFAULT_TIMEOUT_SECONDS = 10;
     public static final int DEFAULT_SCHEDULE_INTERVAL_SECONDS = 15;
-    public static final String DEFAULT_NO_PRIVATE_TOPIC_PREFIX = "";
+    public static final String DEFAULT_PRIVATE_TOPIC_PREFIX = "";
     public static final boolean DEFAULT_LIMIT_ENFORCED = false;
     /**
      * Custom broker property key, used to specify the upper limit of partitions that should be allowed
      * in the cluster. If this property is not specified, a default of {@link #DEFAULT_MAX_PARTITIONS}
      * will be used in this class.
      */
-    public static final String MAX_PARTITIONS = CREATE_TOPIC_POLICY_PREFIX + "max.partitions";
+    public static final String MAX_PARTITIONS = "max.partitions";
 
     /**
      * Custom broker property key, used to specify the number of seconds to use as a timeout duration
@@ -182,23 +177,8 @@ public class Config {
     public static final ConfigDef PARTITION_COUNTER_CONFIG_DEF = new ConfigDef()
             .define(LIMIT_ENFORCED, ConfigDef.Type.BOOLEAN, DEFAULT_LIMIT_ENFORCED, ConfigDef.Importance.MEDIUM, "Feature flag to allow enabling of partition limit enforcement")
             .define(MAX_PARTITIONS, ConfigDef.Type.INT, DEFAULT_MAX_PARTITIONS, ConfigDef.Importance.MEDIUM, "Max partitions")
-            .define(PRIVATE_TOPIC_PREFIX, ConfigDef.Type.STRING, DEFAULT_NO_PRIVATE_TOPIC_PREFIX, ConfigDef.Importance.MEDIUM, "Internal Partition Prefix")
+            .define(PRIVATE_TOPIC_PREFIX, ConfigDef.Type.STRING, DEFAULT_PRIVATE_TOPIC_PREFIX, ConfigDef.Importance.MEDIUM, "Internal Partition Prefix")
             .define(TIMEOUT_SECONDS, ConfigDef.Type.INT, DEFAULT_TIMEOUT_SECONDS,ConfigDef.Importance.MEDIUM, "Timeout duration for listing and describing topics")
             .define(SCHEDULE_INTERVAL_SECONDS, ConfigDef.Type.INT, DEFAULT_SCHEDULE_INTERVAL_SECONDS,ConfigDef.Importance.MEDIUM, "Schedule interval for scheduled counter");
     // ===== end of partition counter configs definition =====
-
-    public static final String DEFAULT_REPLICATION_FACTOR = KafkaConfig.DefaultReplicationFactorProp();
-    public static Optional<Short> brokerMinInsyncReplicas(Map<String, ?> configs) {
-        return getConfig(MIN_IN_SYNC_REPLICAS_CONFIG, configs)
-                .map(v -> Short.valueOf(v.toString()));
-    }
-
-    public static Optional<Short> brokerDefaultReplicationFactor(Map<String, ?> configs) {
-        return getConfig(DEFAULT_REPLICATION_FACTOR, configs)
-                .map(v -> Short.valueOf(v.toString()));
-    }
-
-    public static Optional<Object> getConfig(String name, Map<String, ?> configs){
-        return Optional.ofNullable(configs.get(name));
-    }
 }
