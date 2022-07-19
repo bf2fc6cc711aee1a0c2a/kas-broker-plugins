@@ -85,7 +85,6 @@ public class ConfigRules {
         }
     }
 
-
     /**
      * This method gets a list of values which contains key,value pairs and returns a map of
      * key value pairs. the format of list is ["key1:val1", "key2:val2", ....]

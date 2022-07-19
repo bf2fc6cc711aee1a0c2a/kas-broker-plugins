@@ -135,7 +135,7 @@ public class Config {
     public static final int DEFAULT_MAX_PARTITIONS = -1;
     public static final int DEFAULT_TIMEOUT_SECONDS = 10;
     public static final int DEFAULT_SCHEDULE_INTERVAL_SECONDS = 15;
-    public static final String DEFAULT_NO_PRIVATE_TOPIC_PREFIX = "";
+    public static final String DEFAULT_PRIVATE_TOPIC_PREFIX = "";
     public static final boolean DEFAULT_LIMIT_ENFORCED = false;
     /**
      * Custom broker property key, used to specify the upper limit of partitions that should be allowed
@@ -177,7 +177,7 @@ public class Config {
     public static final ConfigDef PARTITION_COUNTER_CONFIG_DEF = new ConfigDef()
             .define(LIMIT_ENFORCED, ConfigDef.Type.BOOLEAN, DEFAULT_LIMIT_ENFORCED, ConfigDef.Importance.MEDIUM, "Feature flag to allow enabling of partition limit enforcement")
             .define(MAX_PARTITIONS, ConfigDef.Type.INT, DEFAULT_MAX_PARTITIONS, ConfigDef.Importance.MEDIUM, "Max partitions")
-            .define(PRIVATE_TOPIC_PREFIX, ConfigDef.Type.STRING, DEFAULT_NO_PRIVATE_TOPIC_PREFIX, ConfigDef.Importance.MEDIUM, "Internal Partition Prefix")
+            .define(PRIVATE_TOPIC_PREFIX, ConfigDef.Type.STRING, DEFAULT_PRIVATE_TOPIC_PREFIX, ConfigDef.Importance.MEDIUM, "Internal Partition Prefix")
             .define(TIMEOUT_SECONDS, ConfigDef.Type.INT, DEFAULT_TIMEOUT_SECONDS,ConfigDef.Importance.MEDIUM, "Timeout duration for listing and describing topics")
             .define(SCHEDULE_INTERVAL_SECONDS, ConfigDef.Type.INT, DEFAULT_SCHEDULE_INTERVAL_SECONDS,ConfigDef.Importance.MEDIUM, "Schedule interval for scheduled counter");
     // ===== end of partition counter configs definition =====

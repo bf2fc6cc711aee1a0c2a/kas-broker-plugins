@@ -19,7 +19,8 @@ kas-broker-plugins has no affiliation with and is not endorsed by The Apache Sof
 Currently included here are:
 
 - `io.bf2.kafka.authorizer.CustomAclAuthorizer` - an https://kafka.apache.org/documentation/#security_authz[Authorizer] implementation
-- `io.bf2.kafka.topic.ManagedKafkaCreateTopicPolicy` - a https://cwiki.apache.org/confluence/display/KAFKA/KIP-108%3A+Create+Topic+Policy[CreateTopicPolicy] implementation
+- `io.bf2.kafka.topic.ManagedKafkaCreateTopicPolicy` - an https://cwiki.apache.org/confluence/display/KAFKA/KIP-108%3A+Create+Topic+Policy[CreateTopicPolicy] implementation
+- `io.bf2.kafka.config.ManagedKafkaAlterConfigPolicy` - an https://cwiki.apache.org/confluence/display/KAFKA/KIP-133%3A+Describe+and+Alter+Configs+Admin+APIs#KIP133:DescribeandAlterConfigsAdminAPIs-AlterConfigs[AlterConfigPolicy] implementation
 
 == CustomAclAuthorizer
 
@@ -90,6 +91,62 @@ The ACL permissions will be evaluated in the order they are defined.
 When a rule matches, the Authorizer will return that rule’s evaluation as a decision.
 When no rules match, then by default it is denied.
 So, if ACL is not defined for a resource type then it automatically gets denied.
+
+== ManagedKafkaCreateTopicPolicy
+
+The objective of this policy is to:
+
+* validate the topic replication factor (default allows 3 only)
+* validate number of partitions in the cluster
+* validate the create topic configs
+
+Here are the configuration description:
+
+|===
+|property |description |default value
+
+|kas.policy.create-topic.max.partitions |Specifies the upper limit of partitions that should be allowed in the cluster. If this property is not specified, the default of `-1` implies no limit. |-1
+|kas.policy.create-topic.partition-counter.timeout-seconds |Specifies the duration in seconds to use as a timeout when listing and describing topics. |10
+|kas.policy.create-topic.partition-counter.private-topic-prefix |Specifies the prefix used to match against topic name to detect private/internal topics. |""
+|kas.policy.create-topic.partition-counter.schedule-interval-seconds |Specifies the interval (in seconds) between partition counts. |15
+|kas.policy.create-topic.partition-limit-enforced |`true` enables the enforcement of the partition limit. |false
+|kas.policy.topic-config.enforced |Specifies a mapping between a topic policy key and a value. The property is expressed as a comma separated list of `key:value` pairs where the key and value are separated by  a `:`. Hence the it takes the form `keyA:value1,keyB:value2`. |"flush.ms:9223372036854775807,index.interval.bytes:4096,compression.type:producer,flush.messages:9223372036854775807,segment.jitter.ms:0,min.cleanable.dirty.ratio:0.5,file.delete.delay.ms:60000,segment.index.bytes:10485760,preallocate:false,unclean.leader.election.enable:false"
+|kas.policy.topic-config.mutable |Specifies which properties of topic are allowed to be configured. It's a comma separated list. The configs in `kas.policy.topic-config.enforced` and `kas.policy.topic-config.range config` will be considered as mutable configs by default. |"message.timestamp.difference.max.ms,message.timestamp.type,retention.bytes,min.compaction.lag.ms,cleanup.policy,max.compaction.lag.ms,delete.retention.ms,message.downconversion.enable"
+|kas.policy.topic-config.range |Specifies a mapping from config key to an inclusive/closed range of values. Entries are formatted as a triplet using `:` as a separator, `key:min:max` where either min or max are optional implying a single bound as appropriate. Multiple triplets are comma separated. For example  `configA:minA:maxA,configB:minB:maxB,...`. |"max.message.bytes::1048588,segment.bytes:52428800:,segment.ms:600000:"
+|===
+
+=== Configuring the policies
+To configure the create topic policy, you should add config in the Kafka CR.
+A sample CR fragment looks like:
+
+[source,yaml]
+----
+kafka:
+  spec:
+    config:
+      create.topic.policy.class.name=io.bf2.kafka.topic.ManagedKafkaCreateTopicPolicy
+      alter.config.policy.class.name=io.bf2.kafka.config.ManagedKafkaAlterConfigPolicy
+      # partition limit setting
+      kas.policy.create-topic.max.partitions=1000
+      kas.policy.create-topic.partition-counter.timeout-seconds=10
+      kas.policy.create-topic.partition-counter.private-topic-prefix="__redhat"
+      kas.policy.create-topic.partition-counter.schedule-interval-seconds=15
+      kas.policy.create-topic.partition-limit-enforced=true
+      # topic config setting
+      kas.policy.topic-config.enforced=compression.type:producer,segment.jitter.ms:0
+      kas.policy.topic-config.mutable=cleanup.policy,delete.retention.ms,retention.bytes,retention.ms
+      kas.policy.topic-config.range=segment.bytes:52428800:,segment.ms:600000:
+----
+
+== ManagedKafkaAlterConfigPolicy
+
+The objective of this policy is to validate the alter topic configs
+
+The configuration and the description is the same as ManagedKafkaCreateTopicPolicy, except ManagedKafkaAlterConfigPolicy only accepts topic-config configs, i.e.
+
+* `kas.policy.topic-config.enforced`
+* `kas.policy.topic-config.mutable`
+* `kas.policy.topic-config.range`
 
 == Building
 
