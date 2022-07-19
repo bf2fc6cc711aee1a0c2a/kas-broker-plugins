@@ -23,7 +23,6 @@ import static org.apache.kafka.common.config.TopicConfig.RETENTION_BYTES_CONFIG;
 import static org.apache.kafka.common.config.TopicConfig.RETENTION_MS_CONFIG;
 import static org.apache.kafka.common.config.TopicConfig.SEGMENT_BYTES_CONFIG;
 import static org.apache.kafka.common.config.TopicConfig.SEGMENT_INDEX_BYTES_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.SEGMENT_JITTER_MS_CONFIG;
 import static org.apache.kafka.common.config.TopicConfig.SEGMENT_MS_CONFIG;
 import static org.apache.kafka.common.config.TopicConfig.UNCLEAN_LEADER_ELECTION_ENABLE_CONFIG;
 
@@ -79,7 +78,6 @@ public class Config {
             INDEX_INTERVAL_BYTES_CONFIG + ":4096",
             MIN_CLEANABLE_DIRTY_RATIO_CONFIG + ":0.5",
             PREALLOCATE_CONFIG + ":false",
-            SEGMENT_JITTER_MS_CONFIG + ":0",
             UNCLEAN_LEADER_ELECTION_ENABLE_CONFIG + ":false",
             SEGMENT_INDEX_BYTES_CONFIG + ":10485760"
     );
@@ -103,7 +101,6 @@ public class Config {
             RETENTION_MS_CONFIG,
             SEGMENT_BYTES_CONFIG,
             SEGMENT_INDEX_BYTES_CONFIG,
-            SEGMENT_JITTER_MS_CONFIG,
             SEGMENT_MS_CONFIG,
             UNCLEAN_LEADER_ELECTION_ENABLE_CONFIG,
             MESSAGE_DOWNCONVERSION_ENABLE_CONFIG
