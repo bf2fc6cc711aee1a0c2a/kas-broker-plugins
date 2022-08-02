@@ -46,7 +46,7 @@ import static io.bf2.kafka.authorizer.CustomAclAuthorizer.ACL_PREFIX;
 public class AuditLoggingController implements Configurable, Closeable {
 
     private static final Logger log = LoggerFactory.getLogger(AuditLoggingController.class);
-    private static final Logger auditLogger = LoggerFactory.getLogger("AuditEvents");
+    private final Logger auditLogger;
     private static final String LOGGING_PREFIX = ACL_PREFIX + "logging.";
     private static final String APIS_PROPERTY = LOGGING_PREFIX + "suppressionWindow.apis";
     private static final String DURATION_PROPERTY = LOGGING_PREFIX + "suppressionWindow.duration";
@@ -60,6 +60,22 @@ public class AuditLoggingController implements Configurable, Closeable {
 
     private Cache<CacheKey, CacheEntry> loggingEventCache;
     private Set<ApiKeys> suppressApis = Collections.emptySet();
+
+    /**
+     * Primary constructor
+     */
+    public AuditLoggingController() {
+        this("AuditEvents");
+    }
+
+    /**
+     * primarily for tests to increase isolation.
+     * Identifies which logger to direct audit events to.
+     * @param auditLoggerKey the name for the logger to use for audit logging.
+     */
+    AuditLoggingController(String auditLoggerKey) {
+        auditLogger = LoggerFactory.getLogger(auditLoggerKey);
+    }
 
     @Override
     public void configure(Map<String, ?> configs) {
