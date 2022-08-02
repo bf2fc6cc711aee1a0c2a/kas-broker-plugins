@@ -61,9 +61,9 @@ class CustomAclAuthorizerTest {
     void setup() {
         this.delegate = Mockito.mock(kafka.security.authorizer.AclAuthorizer.class);
 
-        Mockito.when(this.delegate.authorize(Mockito.any(AuthorizableRequestContext.class), Mockito.anyListOf(Action.class)))
+        Mockito.when(this.delegate.authorize(Mockito.any(AuthorizableRequestContext.class), Mockito.anyList()))
             .thenAnswer(invocation -> {
-                int count = invocation.getArgumentAt(1, List.class).size();
+                int count = invocation.getArgument(1, List.class).size();
                 List<AuthorizationResult> results = new ArrayList<>(count);
                 for (int i = 0; i < count; i++) {
                     results.add(AuthorizationResult.DENIED);
