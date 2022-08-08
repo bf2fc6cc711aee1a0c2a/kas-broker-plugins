@@ -46,6 +46,10 @@
         <kafka-junit.version>4.2.1</kafka-junit.version>
         <curator-test.version>5.2.0</curator-test.version>
         <awaitility.version>4.2.0</awaitility.version>
+
+        <!--Sonar Setting-->
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <sonar.organization>bf2fc6cc711aee1a0c2a</sonar.organization>
     </properties>
 
     <dependencies>
@@ -207,6 +211,25 @@
                     <arguments>-Dmaven.deploy.skip=true</arguments>
                     <allowTimestampedSnapshots>true</allowTimestampedSnapshots>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                        <phase>generate-test-resources</phase>
+                    </execution>
+                    <execution>
+                        <id>default-report</id>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
