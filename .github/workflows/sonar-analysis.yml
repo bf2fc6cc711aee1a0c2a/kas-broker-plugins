@@ -58,14 +58,16 @@ jobs:
       ## Extract the `target` directory from the build job
       - name: Extract Build Result
         run: |
-          unzip target.zip
+          mkdir -p $(pwd)/target
+          unzip target.zip -d $(pwd)/target
+
       ## Load the context from the build job - runs for any trigger to allow templates with `steps.build_context.outputs.content`
       ## to be accepted by GitHub Actions.
       - name: Read Build Context
         id: build_context
         uses: juliangruber/read-file-action@v1
         with:
-          path: ./build-context.json
+          path: ./target/build-context.json
 
       ## (PRs Only) Check out the base branch (target of the PR)
       - name: Checkout Base Branch (PR Only)
