@@ -8,6 +8,9 @@ endif::[]
 
 = kas-broker-plugins
 
+image:https://img.shields.io/badge/license-Apache--2.0-blue.svg["License", link="http://www.apache.org/licenses/LICENSE-2.0"]
+image:https://sonarcloud.io/api/project_badges/measure?project=bf2fc6cc711aee1a0c2a_kas-broker-plugins&metric=alert_status["Quality Gate Status", link="https://sonarcloud.io/summary/new_code?id=bf2fc6cc711aee1a0c2a_kas-broker-plugins"]
+
 A collection of plugins for https://kafka.apache.org/[Apache Kafka®] that are used to enforce configurable controls.
 
 [NOTE]

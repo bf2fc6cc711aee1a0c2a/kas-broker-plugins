@@ -58,7 +58,9 @@ jobs:
       ## Extract the `target` directory from the build job
       - name: Extract Build Result
         run: |
-          unzip target.zip
+          mkdir -p $(pwd)/target
+          unzip target.zip -d $(pwd)/target
+
       ## Load the context from the build job - runs for any trigger to allow templates with `steps.build_context.outputs.content`
       ## to be accepted by GitHub Actions.
       - name: Read Build Context
@@ -78,6 +80,7 @@ jobs:
           git checkout -B $BASE_BRANCH upstream/$BASE_BRANCH
           git checkout ${{ github.event.workflow_run.head_sha }}
           git clean -ffdx --exclude=target/ && git reset --hard HEAD
+
       - name: Setup JDK
         uses: actions/setup-java@v1
         with:
