@@ -65,7 +65,7 @@ jobs:
         id: build_context
         uses: juliangruber/read-file-action@v1
         with:
-          path: ./target/build-context.json
+          path: ./build-context.json
 
       ## (PRs Only) Check out the base branch (target of the PR)
       - name: Checkout Base Branch (PR Only)
@@ -78,6 +78,7 @@ jobs:
           git checkout -B $BASE_BRANCH upstream/$BASE_BRANCH
           git checkout ${{ github.event.workflow_run.head_sha }}
           git clean -ffdx --exclude=target/ && git reset --hard HEAD
+
       - name: Setup JDK
         uses: actions/setup-java@v1
         with:
