@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableMap;
 import io.bf2.kafka.common.Config;
 import io.bf2.kafka.common.LocalAdminClient;
 import io.bf2.kafka.common.PartitionCounter;
-import io.bf2.kafka.config.ManagedKafkaAlterConfigPolicy;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy.RequestMetadata;
 import org.junit.jupiter.api.AfterEach;
@@ -24,12 +23,13 @@ import static org.apache.kafka.common.config.TopicConfig.MIN_IN_SYNC_REPLICAS_CO
 import static org.junit.Assert.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.when;
 
 
 class ManagedKafkaCreateTopicPolicyTest {
     private ManagedKafkaCreateTopicPolicy policy;
     private ManagedKafkaCreateTopicPolicy disabledPolicy;
-    private Map<String, Object> disabledConfigs = ImmutableMap.<String, Object>builder()
+    private final Map<String, Object> disabledConfigs = ImmutableMap.<String, Object>builder()
             .put(ManagedKafkaCreateTopicPolicy.DEFAULT_REPLICATION_FACTOR, 3)
             .put(MIN_IN_SYNC_REPLICAS_CONFIG, 2)
             .put(Config.MAX_PARTITIONS, 1000)
@@ -42,7 +42,7 @@ class ManagedKafkaCreateTopicPolicyTest {
             .put(Config.MUTABLE_CONFIGS, "min.insync.replicas,retention.ms,max.message.bytes,segment.bytes")
             .put(Config.RANGE_CONFIGS, Config.DEFAULT_RANGE_CONFIGS + ",min.cleanable.dirty.ratio:0.5:0.6")
             .build();
-    private Map<String, Object> configs = ImmutableMap.<String, Object>builder()
+    private final Map<String, Object> configs = ImmutableMap.<String, Object>builder()
             .putAll(disabledConfigs)
             .put(Config.TOPIC_CONFIG_POLICY_ENFORCED, true)
             .build();
@@ -82,7 +82,7 @@ class ManagedKafkaCreateTopicPolicyTest {
     })
     void testDefaultConfigValueRules(String configKey, String configVal, boolean isValid) {
         RequestMetadata r = buildRequest();
-        Mockito.when(r.configs()).thenReturn(Map.of(configKey, configVal));
+        when(r.configs()).thenReturn(Map.of(configKey, configVal));
         if (isValid) {
             assertDoesNotThrow(() -> policy.validate(r));
         } else {
@@ -99,7 +99,7 @@ class ManagedKafkaCreateTopicPolicyTest {
     })
     void testImmutableRules(String configKey, boolean isValid) {
         RequestMetadata r = buildRequest();
-        Mockito.when(r.configs()).thenReturn(Map.of(configKey, "Doesn't matter"));
+        when(r.configs()).thenReturn(Map.of(configKey, "Doesn't matter"));
         if (isValid) {
             assertDoesNotThrow(() -> policy.validate(r));
         } else {
@@ -127,7 +127,7 @@ class ManagedKafkaCreateTopicPolicyTest {
     })
     void testRangeRules(String configKey, String configVal, boolean isValid) {
         RequestMetadata r = buildRequest();
-        Mockito.when(r.configs()).thenReturn(Map.of(configKey, configVal));
+        when(r.configs()).thenReturn(Map.of(configKey, configVal));
         if (isValid) {
             assertDoesNotThrow(() -> policy.validate(r));
         } else {
@@ -140,28 +140,38 @@ class ManagedKafkaCreateTopicPolicyTest {
     @Test
     void testInvalidRF() {
         RequestMetadata r = buildRequest();
-        Mockito.when(r.replicationFactor()).thenReturn((short)2);
+        when(r.replicationFactor()).thenReturn((short) 2);
         assertThrows(PolicyViolationException.class, () -> policy.validate(r));
     }
 
     @Test
     void testWhenIsrIsOne() {
         RequestMetadata r = buildRequest();
-        Mockito.when(r.configs()).thenReturn(Map.of(MIN_IN_SYNC_REPLICAS_CONFIG, "1"));
+        when(r.configs()).thenReturn(Map.of(MIN_IN_SYNC_REPLICAS_CONFIG, "1"));
         assertThrows(PolicyViolationException.class, () -> policy.validate(r));
     }
 
     @Test
     void testIsrGreaterThanDefault() {
         RequestMetadata r = buildRequest();
-        Mockito.when(r.configs()).thenReturn(Map.of(MIN_IN_SYNC_REPLICAS_CONFIG, "10"));
+        when(r.configs()).thenReturn(Map.of(MIN_IN_SYNC_REPLICAS_CONFIG, "10"));
         assertThrows(PolicyViolationException.class, () -> policy.validate(r));
     }
 
     @Test
     void testIsrSameAsDefault() {
         RequestMetadata r = buildRequest();
-        Mockito.when(r.configs()).thenReturn(Map.of(MIN_IN_SYNC_REPLICAS_CONFIG, "2"));
+        when(r.configs()).thenReturn(Map.of(MIN_IN_SYNC_REPLICAS_CONFIG, "2"));
+        assertDoesNotThrow(() -> policy.validate(r));
+    }
+
+    @Test
+    void testNullDefaultReplicationFactor() {
+        final Map<String, Object> updatedConfig = new HashMap<>(configs);
+        updatedConfig.remove(ManagedKafkaCreateTopicPolicy.DEFAULT_REPLICATION_FACTOR);
+        policy.configure(updatedConfig);
+        RequestMetadata r = buildRequest();
+        when(r.configs()).thenReturn(Map.of(MIN_IN_SYNC_REPLICAS_CONFIG, "2"));
         assertDoesNotThrow(() -> policy.validate(r));
     }
 
@@ -261,7 +271,9 @@ class ManagedKafkaCreateTopicPolicyTest {
         "__kas_topic1, 9999, 3, 2, ALLOWED",
     })
     void testTopicValidationBypass(String topicName, int partitions, short replicationFactor, int isr,
-            String expectedResult) throws Exception {
+                                   String expectedResult) throws Exception {
+        policy = new ManagedKafkaCreateTopicPolicy();
+        policy.configure(configs);
         RequestMetadata ctpRequestMetadata = new RequestMetadata(topicName, partitions, replicationFactor, null,
                 Map.of(MIN_IN_SYNC_REPLICAS_CONFIG, String.valueOf(isr)));
 
@@ -276,19 +288,19 @@ class ManagedKafkaCreateTopicPolicyTest {
     private PartitionCounter generateMockPartitionCounter(int numPartitions, boolean response, boolean limitEnforced)
             throws InterruptedException, ExecutionException, TimeoutException {
         PartitionCounter partitionCounter = Mockito.mock(PartitionCounter.class);
-        Mockito.when(partitionCounter.getMaxPartitions()).thenReturn(1000);
-        Mockito.when(partitionCounter.getExistingPartitionCount()).thenReturn(numPartitions);
-        Mockito.when(partitionCounter.countExistingPartitions()).thenReturn(numPartitions);
-        Mockito.when(partitionCounter.reservePartitions(Mockito.anyInt())).thenReturn(response);
-        Mockito.when(partitionCounter.isLimitEnforced()).thenReturn(limitEnforced);
+        when(partitionCounter.getMaxPartitions()).thenReturn(1000);
+        when(partitionCounter.getExistingPartitionCount()).thenReturn(numPartitions);
+        when(partitionCounter.countExistingPartitions()).thenReturn(numPartitions);
+        when(partitionCounter.reservePartitions(Mockito.anyInt())).thenReturn(response);
+        when(partitionCounter.isLimitEnforced()).thenReturn(limitEnforced);
 
         return partitionCounter;
     }
 
     private RequestMetadata buildRequest() {
         RequestMetadata r = Mockito.mock(RequestMetadata.class);
-        Mockito.when(r.topic()).thenReturn("test");
-        Mockito.when(r.replicationFactor()).thenReturn((short)3);
+        when(r.topic()).thenReturn("test");
+        when(r.replicationFactor()).thenReturn((short) 3);
         return r;
     }
 

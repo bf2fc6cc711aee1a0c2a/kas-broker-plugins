@@ -83,16 +83,30 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
         Optional<Short> defaultIsr = defaultIsr();
 
         // grab the client's isr value if present
-        Optional<Short> isr = getConfig(MIN_IN_SYNC_REPLICAS_CONFIG, requestMetadata.configs())
+        Optional<Short> requestIsr = getConfig(MIN_IN_SYNC_REPLICAS_CONFIG, requestMetadata.configs())
                 .map(v -> Short.valueOf(v.toString()));
 
         // if not present, cluster default value taken automatically, otherwise
         // only allow isr if the defined value >= to default isr value configured and <= system replication
         // factor, as there is no meaning setting this value higher than replication factor.
-        if ((isr.isPresent() && defaultIsr.isPresent()) && (isr.get() < defaultIsr.get() || isr.get() > defaultReplicationFactor().get())) {
-            throw new PolicyViolationException(String.format("Topic %s configured with invalid minimum insync replicas %d, recommended minimum insync replicas are %d", requestMetadata.topic(), isr.get(), defaultIsr.get()));
+        if (isrIsLessThanDefaultIsr(requestIsr, defaultIsr) || isrIsGreaterThanReplicationFactor(requestIsr, defaultReplicationFactor())) {
+            throw new PolicyViolationException(String.format("Topic %s configured with invalid minimum insync replicas %d, recommended minimum insync replicas are %d",
+                    requestMetadata.topic(),
+                    requestIsr.orElse(null),
+                    defaultIsr.orElse(null)));
         }
     }
+
+    @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
+    private boolean isrIsLessThanDefaultIsr(Optional<Short> requestIsr, Optional<Short> defaultIsr) {
+        return requestIsr.isPresent() && defaultIsr.isPresent() && (requestIsr.get() < defaultIsr.get());
+    }
+
+    @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
+    private boolean isrIsGreaterThanReplicationFactor(Optional<Short> requestIsr, Optional<Short> replicationFactor) {
+        return requestIsr.isPresent() && replicationFactor.isPresent() && (requestIsr.get() > replicationFactor.get());
+    }
+
 
     private void validateNumPartitions(RequestMetadata requestMetadata) throws PolicyViolationException {
         if (!partitionCounter.isLimitEnforced()) {
