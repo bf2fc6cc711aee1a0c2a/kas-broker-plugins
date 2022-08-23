@@ -40,7 +40,7 @@ class ManagedKafkaCreateTopicPolicyTest {
             .put(LocalAdminClient.LISTENER_PROTOCOL, "PLAINTEXT")
             .put(Config.ENFORCED_VALUE_CONFIGS, "compression.type:producer,unclean.leader.election.enable:false")
             .put(Config.MUTABLE_CONFIGS, "min.insync.replicas,retention.ms,max.message.bytes,segment.bytes")
-            .put(Config.RANGE_CONFIGS, Config.DEFAULT_RANGE_CONFIGS + ",min.cleanable.dirty.ratio:0.5:0.6")
+            .put(Config.RANGE_CONFIGS, "max.message.bytes::1048588,segment.bytes:52428800:,min.cleanable.dirty.ratio:0.5:0.6")
             .build();
     private Map<String, Object> configs = ImmutableMap.<String, Object>builder()
             .putAll(disabledConfigs)
