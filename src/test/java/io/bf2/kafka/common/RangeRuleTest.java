@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class RangeRuleTest {
     private RangeRule rangeRule;
-    private Map<String, Range<Double>> rangeConfigs = Map.of(
+    private final Map<String, Range<Double>> rangeConfigs = Map.of(
             "x.y.a", Range.atLeast((double)1),
             "x.y.b", Range.atLeast((double)1.0),
             "x.y.c", Range.atLeast((double)1.00),
@@ -23,7 +23,7 @@ class RangeRuleTest {
     );
 
     @BeforeEach
-    private void setup() {
+    public void setup() {
         rangeRule = new RangeRule(rangeConfigs);
     }
 

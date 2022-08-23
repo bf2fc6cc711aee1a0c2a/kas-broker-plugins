@@ -9,9 +9,12 @@ import org.apache.kafka.server.policy.CreateTopicPolicy.RequestMetadata;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.Mock;
 import org.mockito.Mockito;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.HashMap;
 import java.util.List;
@@ -25,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.when;
 
-
+@ExtendWith(MockitoExtension.class)
 class ManagedKafkaCreateTopicPolicyTest {
     private ManagedKafkaCreateTopicPolicy policy;
     private ManagedKafkaCreateTopicPolicy disabledPolicy;
@@ -47,10 +50,13 @@ class ManagedKafkaCreateTopicPolicyTest {
             .put(Config.TOPIC_CONFIG_POLICY_ENFORCED, true)
             .build();
 
+    @Mock(strictness = Mock.Strictness.LENIENT)
+    private PartitionCounter partitionCounter;
+
     @BeforeEach
     void setup() {
-        policy = new ManagedKafkaCreateTopicPolicy();
-        disabledPolicy = new ManagedKafkaCreateTopicPolicy();
+        policy = new ManagedKafkaCreateTopicPolicy(partitionCounter);
+        disabledPolicy = new ManagedKafkaCreateTopicPolicy(partitionCounter);
         policy.configure(configs);
         disabledPolicy.configure(disabledConfigs);
     }
@@ -271,7 +277,7 @@ class ManagedKafkaCreateTopicPolicyTest {
         "__kas_topic1, 9999, 3, 2, ALLOWED",
     })
     void testTopicValidationBypass(String topicName, int partitions, short replicationFactor, int isr,
-                                   String expectedResult) throws Exception {
+                                   String expectedResult) {
         policy = new ManagedKafkaCreateTopicPolicy();
         policy.configure(configs);
         RequestMetadata ctpRequestMetadata = new RequestMetadata(topicName, partitions, replicationFactor, null,
@@ -287,7 +293,6 @@ class ManagedKafkaCreateTopicPolicyTest {
 
     private PartitionCounter generateMockPartitionCounter(int numPartitions, boolean response, boolean limitEnforced)
             throws InterruptedException, ExecutionException, TimeoutException {
-        PartitionCounter partitionCounter = Mockito.mock(PartitionCounter.class);
         when(partitionCounter.getMaxPartitions()).thenReturn(1000);
         when(partitionCounter.getExistingPartitionCount()).thenReturn(numPartitions);
         when(partitionCounter.countExistingPartitions()).thenReturn(numPartitions);
