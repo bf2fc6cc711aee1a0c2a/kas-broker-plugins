@@ -2,7 +2,6 @@ package io.bf2.kafka.config;
 
 import com.google.common.collect.ImmutableMap;
 import io.bf2.kafka.common.Config;
-import io.bf2.kafka.common.LocalAdminClient;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.AlterConfigPolicy.RequestMetadata;

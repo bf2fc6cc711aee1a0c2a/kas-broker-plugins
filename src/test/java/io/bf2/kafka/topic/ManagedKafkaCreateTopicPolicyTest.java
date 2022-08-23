@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableMap;
 import io.bf2.kafka.common.Config;
 import io.bf2.kafka.common.LocalAdminClient;
 import io.bf2.kafka.common.PartitionCounter;
-import io.bf2.kafka.config.ManagedKafkaAlterConfigPolicy;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.CreateTopicPolicy.RequestMetadata;
 import org.junit.jupiter.api.AfterEach;

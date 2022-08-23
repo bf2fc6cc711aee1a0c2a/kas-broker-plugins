@@ -3,30 +3,6 @@ package io.bf2.kafka.common;
 import org.apache.kafka.common.config.ConfigDef;
 
 import java.util.Collections;
-import java.util.Set;
-
-import static org.apache.kafka.common.config.TopicConfig.CLEANUP_POLICY_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.COMPRESSION_TYPE_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.DELETE_RETENTION_MS_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.FILE_DELETE_DELAY_MS_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.FLUSH_MESSAGES_INTERVAL_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.FLUSH_MS_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.INDEX_INTERVAL_BYTES_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.MAX_COMPACTION_LAG_MS_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.MAX_MESSAGE_BYTES_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.MESSAGE_DOWNCONVERSION_ENABLE_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.MESSAGE_TIMESTAMP_TYPE_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.MIN_CLEANABLE_DIRTY_RATIO_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.MIN_COMPACTION_LAG_MS_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.PREALLOCATE_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.RETENTION_BYTES_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.RETENTION_MS_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.SEGMENT_BYTES_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.SEGMENT_INDEX_BYTES_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.SEGMENT_JITTER_MS_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.SEGMENT_MS_CONFIG;
-import static org.apache.kafka.common.config.TopicConfig.UNCLEAN_LEADER_ELECTION_ENABLE_CONFIG;
 
 public class Config {
     public static final String PREFIX = "kas.";

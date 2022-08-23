@@ -13,8 +13,6 @@ import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
-import static org.apache.kafka.common.config.TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG;
-
 public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
     protected static final String DEFAULT_REPLICATION_FACTOR = KafkaConfig.DefaultReplicationFactorProp();
 
