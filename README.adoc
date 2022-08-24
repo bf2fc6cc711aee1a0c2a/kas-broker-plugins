@@ -115,7 +115,7 @@ Here are the configuration description:
 |kas.policy.create-topic.partition-limit-enforced |`true` enables the enforcement of the partition limit. |false
 |kas.policy.topic-config.enforced |Specifies a mapping between a topic policy key and a value. The property is expressed as a comma separated list of `key:value` pairs where the key and value are separated by  a `:`. Hence the it takes the form `keyA:value1,keyB:value2`. |[]
 |kas.policy.topic-config.mutable |Specifies which properties of topic are allowed to be configured. It's a comma separated list. The configs in `kas.policy.topic-config.enforced` and `kas.policy.topic-config.range config` will be considered as mutable configs by default. |[]
-|kas.policy.topic-config.range |Specifies a mapping from config key to an inclusive/closed range of values. Entries are formatted as a triplet using `:` as a separator, `key:min:max` where either min or max are optional implying a single bound as appropriate. Multiple triplets are comma separated. For example  `configA:minA:maxA,configB:minB:maxB,...`. |[]
+|kas.policy.topic-config.range |Specifies a mapping from config key to an inclusive/closed range of values. Entries are formatted as a triplet using `:` as a separator, `key:min:max` where either min or max are optional implying a single bound as appropriate. Multiple triplets are comma separated. For example `configA:minA:maxA,configB::maxB,configC:minC:,...`. |[]
 |kas.policy.topic-config.topic-config-policy-enforced |Feature flag broker property key to allow enabling/disabling of topic config policies. |false
 |===
 
