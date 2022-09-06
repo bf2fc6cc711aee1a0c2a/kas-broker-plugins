@@ -2,7 +2,6 @@ package io.bf2.kafka.config;
 
 import com.google.common.collect.ImmutableMap;
 import io.bf2.kafka.common.Config;
-import io.bf2.kafka.common.LocalAdminClient;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.apache.kafka.server.policy.AlterConfigPolicy.RequestMetadata;
@@ -26,7 +25,7 @@ class ManagedKafkaAlterConfigPolicyTest {
     private Map<String, Object> disabledConfigs = Map.of(
             Config.ENFORCED_VALUE_CONFIGS, "compression.type:producer,unclean.leader.election.enable:false",
             Config.MUTABLE_CONFIGS, "retention.ms,max.message.bytes,segment.bytes",
-            Config.RANGE_CONFIGS, Config.DEFAULT_RANGE_CONFIGS + ",min.cleanable.dirty.ratio:0.5:0.6");
+            Config.RANGE_CONFIGS, "max.message.bytes::1048588,segment.bytes:52428800:,min.cleanable.dirty.ratio:0.5:0.6");
     private Map<String, Object> configs = ImmutableMap.<String, Object>builder()
             .putAll(disabledConfigs)
             .put(Config.TOPIC_CONFIG_POLICY_ENFORCED, true)
