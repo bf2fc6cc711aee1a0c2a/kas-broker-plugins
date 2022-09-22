@@ -40,7 +40,7 @@
         <basescala.version>2.13</basescala.version>
         <junit.version>5.8.2</junit.version>
         <mockito.version>4.6.1</mockito.version>
-        <slf4j.version>1.7.30</slf4j.version>
+        <slf4j.version>1.7.36</slf4j.version>
         <guava.version>30.0-jre</guava.version>
         <zookeeper.version>3.6.3</zookeeper.version>
         <kafka-junit.version>4.2.1</kafka-junit.version>
