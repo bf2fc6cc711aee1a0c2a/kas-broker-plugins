@@ -69,8 +69,8 @@ class AuditLoggingControllerTest {
             "Test log level for specified binding is as expected, DEBUG, DESCRIBE, METADATA, TOPIC, myopictopic, User:test, true",
             "Test can specify fetch API, TRACE, CLUSTER_ACTION, FETCH, CLUSTER, kafka-cluster, User:test, true",
             "Test can turn off some operations per topic, TRACE, DESCRIBE, METADATA, TOPIC, __strimzi_canary, User:canary-something, true",
-            "Test prioritization considering level, DEBUG, CLUSTER_ACTION, ALTER_ISR, CLUSTER, kafka-cluster, User:test, true",
-            "Test override can't go below INFO, INFO, CLUSTER_ACTION, ALTER_ISR, CLUSTER, kafka-cluster, User:test, false",
+            "Test prioritization considering level, DEBUG, CLUSTER_ACTION, ALTER_PARTITION, CLUSTER, kafka-cluster, User:test, true",
+            "Test override can't go below INFO, INFO, CLUSTER_ACTION, ALTER_PARTITION, CLUSTER, kafka-cluster, User:test, false",
             "Test override can go above INFO, WARN, READ, METADATA, TOPIC, important_topic, User:bob, false",
     })
     void testGetLogLevel(String title,
