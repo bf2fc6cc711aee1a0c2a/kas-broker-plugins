@@ -34,7 +34,7 @@ class PartitionCounterIT {
                 final String customPrivateTopicPrefix = "__kas_";
                 List<NewTopic> newTopics = List.of(
                         new NewTopic("topic1", PUBLIC_PARTITION_COUNT / 2, (short) 1),
-                        new NewTopic(Config.DEFAULT_NO_PRIVATE_TOPIC_PREFIX + "topic", PUBLIC_PARTITION_COUNT / 2, (short) 1),
+                        new NewTopic(Config.DEFAULT_PRIVATE_TOPIC_PREFIX + "topic", PUBLIC_PARTITION_COUNT / 2, (short) 1),
                         new NewTopic(customPrivateTopicPrefix + "topic", 11, (short) 1),
                         new NewTopic("__consumer_offsets", 12, (short) 1),
                         new NewTopic("__transaction_state", 13, (short) 1));

@@ -4,7 +4,6 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.TopicListing;
 import org.apache.kafka.common.config.AbstractConfig;
-import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

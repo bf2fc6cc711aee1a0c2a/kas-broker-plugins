@@ -13,8 +13,6 @@ import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
-import static org.apache.kafka.common.config.TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG;
-
 public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
     protected static final String DEFAULT_REPLICATION_FACTOR = KafkaConfig.DefaultReplicationFactorProp();
 
@@ -56,7 +54,6 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
         }
 
         validateReplicationFactor(requestMetadata);
-        validateIsr(requestMetadata);
         validateNumPartitions(requestMetadata);
         validateConfigs(requestMetadata);
     }
@@ -76,21 +73,6 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
                 && defaultReplicationFactor.isPresent()
                 && !requestMetadata.replicationFactor().equals(defaultReplicationFactor.get())) {
             throw new PolicyViolationException(String.format("Topic %s configured with invalid replication factor %d, required replication factor is %d", requestMetadata.topic(), requestMetadata.replicationFactor(), defaultReplicationFactor.get()));
-        }
-    }
-
-    private void validateIsr(RequestMetadata requestMetadata) throws PolicyViolationException {
-        Optional<Short> defaultIsr = defaultIsr();
-
-        // grab the client's isr value if present
-        Optional<Short> isr = getConfig(MIN_IN_SYNC_REPLICAS_CONFIG, requestMetadata.configs())
-                .map(v -> Short.valueOf(v.toString()));
-
-        // if not present, cluster default value taken automatically, otherwise
-        // only allow isr if the defined value >= to default isr value configured and <= system replication
-        // factor, as there is no meaning setting this value higher than replication factor.
-        if ((isr.isPresent() && defaultIsr.isPresent()) && (isr.get() < defaultIsr.get() || isr.get() > defaultReplicationFactor().get())) {
-            throw new PolicyViolationException(String.format("Topic %s configured with invalid minimum insync replicas %d, recommended minimum insync replicas are %d", requestMetadata.topic(), isr.get(), defaultIsr.get()));
         }
     }
 
@@ -128,11 +110,6 @@ public class ManagedKafkaCreateTopicPolicy implements CreateTopicPolicy {
                         addPartitions, maxPartitions, partitionCounter.getRemainingPartitionBudget()), e);
             }
         }
-    }
-
-    private Optional<Short> defaultIsr() {
-        return getConfig(MIN_IN_SYNC_REPLICAS_CONFIG, this.configs)
-                .map(v -> Short.valueOf(v.toString()));
     }
 
     private Optional<Short> defaultReplicationFactor() {

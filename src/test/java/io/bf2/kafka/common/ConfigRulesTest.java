@@ -32,9 +32,9 @@ class ConfigRulesTest {
         Map<String, ?> config = configWith(Map.of(Config.TOPIC_CONFIG_POLICY_ENFORCED, true));
 
         ConfigRules configRules = new ConfigRules(config);
-        assertEquals(defaultConfigRules.parseListToMap(DUMMY_CONFIG_KEY, List.copyOf(Config.DEFAULT_ENFORCED_VALUE_SET)), configRules.getEnforcedConfigs());
-        assertEquals(Config.DEFAULT_MUTABLE_CONFIG_KEYS, configRules.getMutableConfigs());
-        assertEquals(defaultConfigRules.parseListToRangeMap(DUMMY_CONFIG_KEY, List.copyOf(Config.DEFAULT_RANGE_CONFIG_SET)), configRules.getRangeConfigs());
+        assertEquals(Collections.emptyMap(), configRules.getEnforcedConfigs());
+        assertEquals(Collections.emptySet(), configRules.getMutableConfigs());
+        assertEquals(Collections.emptyMap(), configRules.getRangeConfigs());
         assertTrue(configRules.getIsTopicConfigPolicyEnabled());
     }
 
