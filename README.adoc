@@ -188,6 +188,7 @@ If you are already releasing from a branch skip the above step of creating a new
 
 Releases are performed by modifying the `.github/project.yml` file, setting `current-version` to the release version and `next-version` to the next SNAPSHOT.
 Open a pull request with the changed `project.yml` to initiate the pre-release workflows.
+The pull request must be raised against the main repository, not a fork.
 The target of the pull request should be either `main` or a release branch (described above).
 
 At this phase, the project milestone will be checked and it will be verified that no issues for the release milestone are still open.
