@@ -2,6 +2,13 @@ package io.bf2.kafka.authorizer;
 
 import io.bf2.kafka.common.Config;
 import io.bf2.kafka.common.PartitionCounter;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.when;
+
 import org.apache.kafka.common.acl.AccessControlEntry;
 import org.apache.kafka.common.acl.AclBinding;
 import org.apache.kafka.common.acl.AclBindingFilter;
@@ -23,6 +30,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.Mock;
 import org.mockito.Mockito;
 
 import java.io.IOException;
@@ -61,7 +69,7 @@ class CustomAclAuthorizerTest {
     void setup() {
         this.delegate = Mockito.mock(kafka.security.authorizer.AclAuthorizer.class);
 
-        Mockito.when(this.delegate.authorize(Mockito.any(AuthorizableRequestContext.class), Mockito.anyList()))
+        Mockito.when(this.delegate.authorize(any(AuthorizableRequestContext.class), Mockito.anyList()))
             .thenAnswer(invocation -> {
                 int count = invocation.getArgument(1, List.class).size();
                 List<AuthorizationResult> results = new ArrayList<>(count);
@@ -71,7 +79,7 @@ class CustomAclAuthorizerTest {
                 return results;
             });
 
-        Mockito.when(this.delegate.acls(Mockito.any(AclBindingFilter.class)))
+        Mockito.when(this.delegate.acls(any(AclBindingFilter.class)))
             .thenReturn(Collections.emptyList());
     }
 
@@ -206,8 +214,7 @@ class CustomAclAuthorizerTest {
     @ParameterizedTest
     @CsvSource({
         "Denied for principal missing 'User:' prefix, user2",
-        "Denied for principal in static configuration, User:anonymous",
-        "Denied for principal being the requestor, User:owner1"
+        "Denied for principal in static configuration, User:anonymous"
     })
     void testCreateAclsDeniedForInvalidPrincipal(String title, String principal) throws IOException {
         try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
@@ -237,6 +244,43 @@ class CustomAclAuthorizerTest {
                     .map(Optional::get)
                     .allMatch(e -> e instanceof ApiException
                             && CustomAclAuthorizer.CREATE_ACL_INVALID_PRINCIPAL.equals(e.getMessage())));
+        }
+    }
+
+    @Test
+    void testCreateAclsAllowedWhenPrincipalGivesThemselvesACLRules() throws IOException {
+        final List<CompletableFuture<AclCreateResult>> creationResults = new ArrayList<>();
+        final AclCreateResult value = new AclCreateResult(null);
+        creationResults.add(CompletableFuture.completedFuture(value));
+        creationResults.add(CompletableFuture.completedFuture(value));
+        Mockito.doReturn(creationResults).when(delegate).createAcls(any(),anyList());
+
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
+            auth.configure(config);
+
+            AuthorizableRequestContext rc = Mockito.mock(AuthorizableRequestContext.class);
+            Mockito.when(rc.clientAddress()).thenReturn(InetAddress.getLoopbackAddress());
+            Mockito.when(rc.listenerName()).thenReturn("security-9095");
+            final String userName = "tom";
+            Mockito.when(rc.principal()).thenReturn(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, userName));
+            Mockito.when(rc.requestType()).thenReturn((int) ApiKeys.CREATE_ACLS.id);
+
+            AclBinding readUser1Topics = new AclBinding(
+                    new ResourcePattern(ResourceType.TOPIC, "user1_", PatternType.PREFIXED),
+                    new AccessControlEntry("User:" + userName, "*", AclOperation.READ, AclPermissionType.ALLOW));
+            AclBinding writeUser1Topics = new AclBinding(
+                    new ResourcePattern(ResourceType.TOPIC, "user1_", PatternType.PREFIXED),
+                    new AccessControlEntry("User:" + userName, "*", AclOperation.WRITE, AclPermissionType.ALLOW));
+
+            var bindings = List.of(readUser1Topics, writeUser1Topics);
+            var results = auth.createAcls(rc, bindings);
+
+            assertEquals(2, results.size());
+            assertTrue(results.stream()
+                              .map(CompletionStage::toCompletableFuture)
+                              .map(CompletableFuture::join)
+                              .map(AclCreateResult::exception)
+                              .noneMatch(Optional::isPresent));
         }
     }
 

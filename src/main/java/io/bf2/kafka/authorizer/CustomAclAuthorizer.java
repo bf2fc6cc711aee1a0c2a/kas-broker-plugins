@@ -427,12 +427,8 @@ public class CustomAclAuthorizer implements Authorizer {
                             requestContext.principal().getName(),
                             binding.entry().principal());
                     result = errorResult(AclCreateResult::new, CREATE_ACL_INVALID_PRINCIPAL);
-                } else if (Objects.equals(toString(requestContext.principal()), binding.entry().principal())) {
-                    /* Reject ACL operations as invalid where the principal named in the ACL binding is the principal performing the operation */
-                    log.info("Rejected attempt by user {} to self-assign ACL binding",
-                            requestContext.principal().getName());
-                    result = errorResult(AclCreateResult::new, CREATE_ACL_INVALID_PRINCIPAL);
-                } else if (hasPrincipalBindings(binding.entry().principal())) {
+                }
+                else if (hasPrincipalBindings(binding.entry().principal())) {
                     /* Reject ACL operations as invalid where the principal named in the ACL binding is a principal with configured custom ACLs */
                     log.info("Rejected attempt by user {} to create ACL binding for principal {} with existing custom ACL configuration",
                             requestContext.principal().getName(),
