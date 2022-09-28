@@ -179,6 +179,7 @@ class CustomAclBinding extends AclBinding {
         return USER_TYPE_PREFIX + principal;
     }
 
+
     static Set<AclOperation> parseOperations(String value, AclOperation... disallowedValues) {
         return splitOnComma(value).stream()
             .map(AclOperation::fromString)

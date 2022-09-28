@@ -58,7 +58,11 @@ class ApiAwareAccessControlEntry extends AccessControlEntry {
 
     @Override
     public AclOperation operation() {
-        throw new UnsupportedOperationException("operation");
+        if(!operationsExcluded && operations.size() == 1){
+            return operations.iterator().next();
+        } else {
+            return AclOperation.UNKNOWN;
+        }
     }
 
     public Set<AclOperation> operations() {

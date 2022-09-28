@@ -19,6 +19,7 @@ import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.resource.ResourcePatternFilter;
 import org.apache.kafka.common.resource.ResourceType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
+import org.apache.kafka.common.utils.SecurityUtils;
 import org.apache.kafka.server.authorizer.AclCreateResult;
 import org.apache.kafka.server.authorizer.AclDeleteResult;
 import org.apache.kafka.server.authorizer.Action;
@@ -46,6 +47,8 @@ import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import static java.lang.String.format;
 import static java.util.stream.Collectors.toList;
@@ -194,7 +197,7 @@ public class CustomAclAuthorizer implements Authorizer {
         if (configs.containsKey(OWNERS_KEY)) {
             String commaSeparatedOwners = String.valueOf(configs.get(OWNERS_KEY));
             List<String> split = List.of(commaSeparatedOwners.split(","));
-            List<String> principals = split.stream().map(s -> CustomAclBinding.USER_TYPE_PREFIX + s).collect(toList());
+            List<String> principals = split.stream().map(CustomAclBinding::preparePrincipal).collect(toList());
             ownerPrincipals.addAll(principals);
         }
 
@@ -486,7 +489,21 @@ public class CustomAclAuthorizer implements Authorizer {
 
     @Override
     public Iterable<AclBinding> acls(AclBindingFilter filter) {
-        return delegate.acls(filter);
+        Iterable<AclBinding> delegateAcls = delegate.acls(filter);
+        Stream<AclBinding> delegateAclStream = StreamSupport.stream(delegateAcls.spliterator(), false);
+        Stream<AclBinding> ownerAcls = getOwnerAcls(filter);
+        return Stream.concat(delegateAclStream, ownerAcls).collect(toList());
+    }
+
+    private Stream<AclBinding> getOwnerAcls(AclBindingFilter filter) {
+        Set<KafkaPrincipal> ownerPrincipals = this.ownerPrincipals.stream().map(SecurityUtils::parseKafkaPrincipal).collect(Collectors.toSet());
+        return aclMap.values().stream().flatMap(customAclBindings -> {
+            return customAclBindings.stream().filter(binding -> {
+                return binding.isPrincipalSpecified()
+                        && ownerPrincipals.stream().anyMatch(binding::matchesPrincipal)
+                        && filter.matches(binding);
+            });
+        });
     }
 
     @Override

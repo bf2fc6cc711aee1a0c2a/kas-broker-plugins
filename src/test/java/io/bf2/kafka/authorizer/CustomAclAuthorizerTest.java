@@ -3,13 +3,16 @@ package io.bf2.kafka.authorizer;
 import io.bf2.kafka.common.Config;
 import io.bf2.kafka.common.PartitionCounter;
 import org.apache.kafka.common.acl.AccessControlEntry;
+import org.apache.kafka.common.acl.AccessControlEntryFilter;
 import org.apache.kafka.common.acl.AclBinding;
 import org.apache.kafka.common.acl.AclBindingFilter;
 import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.acl.AclPermissionType;
 import org.apache.kafka.common.protocol.ApiKeys;
+import org.apache.kafka.common.requests.DescribeAclsResponse;
 import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.resource.ResourcePattern;
+import org.apache.kafka.common.resource.ResourcePatternFilter;
 import org.apache.kafka.common.resource.ResourceType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.SecurityUtils;
@@ -39,7 +42,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
+import static java.util.stream.Collectors.toList;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -131,7 +136,7 @@ class CustomAclAuthorizerTest {
                     .filter(binding -> binding.entry().permissionType().equals(expPermission))
                     .filter(binding -> binding.matchesListener(expListener))
                     .filter(binding -> binding.matchesPrincipal(expPrincipal))
-                    .collect(Collectors.toList());
+                    .collect(toList());
 
             assertEquals(1, matchedBindings.size());
             assertFalse(matchedBindings.get(0).isPrincipalSpecified());
@@ -280,6 +285,58 @@ class CustomAclAuthorizerTest {
     }
 
 
+    @Test
+    void testAclsIncludesOwnerAcls() throws IOException {
+        KafkaPrincipal owner = SecurityUtils.parseKafkaPrincipal("User:alice");
+        when(delegate.acls(any())).thenReturn(List.of());
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
+            auth.configure(config);
+            Iterable<AclBinding> acls = auth.acls(CustomAclAuthorizer.ANY_ACL);
+            Set<AclBinding> aclBindings = StreamSupport.stream(acls.spliterator(), false).collect(Collectors.toSet());
+            assertEquals(2, aclBindings.size());
+            assertTrue(aclBindings.stream().allMatch(aclBinding -> ((CustomAclBinding) aclBinding).isPrincipalSpecified()));
+            assertTrue(aclBindings.stream().allMatch(aclBinding -> ((CustomAclBinding) aclBinding).matchesPrincipal(owner)));
+            DescribeAclsResponse.aclsResources(aclBindings); // should not fail with exception
+        }
+    }
+
+    @Test
+    void testAclFilterAppliedToOwnerAcls() throws IOException {
+        KafkaPrincipal owner = SecurityUtils.parseKafkaPrincipal("User:alice");
+        when(delegate.acls(any())).thenReturn(List.of());
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
+            auth.configure(config);
+            ResourcePatternFilter literalFilter = new ResourcePatternFilter(ResourceType.TOPIC, "baa", PatternType.LITERAL);
+            AclBindingFilter baa = new AclBindingFilter(literalFilter, AccessControlEntryFilter.ANY);
+            Iterable<AclBinding> acls = auth.acls(baa);
+            Set<AclBinding> aclBindings = StreamSupport.stream(acls.spliterator(), false).collect(Collectors.toSet());
+            assertEquals(1, aclBindings.size());
+            CustomAclBinding onlyBinding = (CustomAclBinding) aclBindings.iterator().next();
+            assertTrue(onlyBinding.isPrincipalSpecified());
+            assertTrue(onlyBinding.matchesPrincipal(owner));
+            assertEquals(ResourceType.TOPIC, onlyBinding.pattern().resourceType());
+            assertEquals("baa", onlyBinding.pattern().name());
+            DescribeAclsResponse.aclsResources(aclBindings); // should not fail with exception
+        }
+    }
+
+    @Test
+    void testAclsIncludesDelegateAcls() throws IOException {
+        ResourcePattern pattern = new ResourcePattern(ResourceType.TOPIC, "topic", PatternType.LITERAL);
+        AccessControlEntry host = new AccessControlEntry("User:bob", "host", AclOperation.ALL, AclPermissionType.ALLOW);
+        List<AclBinding> delegateBindings = List.of(new AclBinding(pattern, host));
+        when(delegate.acls(any())).thenReturn(delegateBindings);
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
+            auth.configure(config);
+            Iterable<AclBinding> acls = auth.acls(CustomAclAuthorizer.ANY_ACL);
+            Set<AclBinding> aclBindings = StreamSupport.stream(acls.spliterator(), false).collect(Collectors.toSet());
+            assertEquals(3, aclBindings.size());
+            assertTrue(aclBindings.containsAll(delegateBindings));
+            DescribeAclsResponse.aclsResources(aclBindings); // should not fail with exception
+        }
+    }
+
+
     private void createAclsAndExpect(String user, List<AclBinding> bindings, Predicate<AclCreateResult> allMatch, int expectedResults) throws IOException {
         try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
             auth.configure(config);
@@ -291,7 +348,7 @@ class CustomAclAuthorizerTest {
             List<AclCreateResult> createResults = results.stream()
                     .map(CompletionStage::toCompletableFuture)
                     .map(CompletableFuture::join)
-                    .collect(Collectors.toList());
+                    .collect(toList());
 
             assertEquals(expectedResults, createResults.size());
             assertTrue(createResults.stream().allMatch(allMatch));
