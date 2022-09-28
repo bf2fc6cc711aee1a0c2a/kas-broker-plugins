@@ -80,12 +80,15 @@ class ManagedKafkaAlterConfigPolicyTest {
     @ParameterizedTest
     @CsvSource({
             // the following config cannot be updated
-            "retention.ms, true",
-            "message.format.version, false"
+            "retention.ms, Anything, true",
+            "message.format.version, Anything, false",
+            "local.retention.bytes, -2, true",
+            "segment.jitter.ms, 0, true",
+            "segment.jitter.ms, 1, false",
     })
-    void testImmutableRules(String configKey, boolean isValid) {
+    void testImmutableRules(String configKey, String configValue, boolean isValid) {
         RequestMetadata r = buildRequest();
-        Mockito.when(r.configs()).thenReturn(Map.of(configKey, "Doesn't matter"));
+        Mockito.when(r.configs()).thenReturn(Map.of(configKey, configValue));
         if (isValid) {
             assertDoesNotThrow(() -> policy.validate(r));
         } else {
