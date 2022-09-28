@@ -48,6 +48,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static java.lang.String.format;
+import static java.util.stream.Collectors.toList;
 
 /**
  * A authorizer for Kafka that defines custom ACLs. The configuration is provided as
@@ -105,10 +106,12 @@ public class CustomAclAuthorizer implements Authorizer {
 
     static final String INVALID_ACL_PRINCIPAL_RESTRICTED_TEMPLATE = "ACL rules including principal '%s' are prohibited - this principal is restricted";
     static final String INVALID_ACL_PRINCIPAL_NON_USER_PREFIXED_TEMPLATE = "ACL rules including principal '%s' are prohibited - principal is not type User";
+    static final String INVALID_ACL_PRINCIPAL_OWNER_TEMPLATE = "ACL rules including principal '%s' are prohibited - this principal is an owner";
     static final String CREATE_ACL_INVALID_BINDING = "Invalid ACL resource or operation";
 
     static final String CONFIG_PREFIX = Config.PREFIX + "authorizer.";
     static final String RESOURCE_OPERATIONS_KEY = CONFIG_PREFIX + "resource-operations";
+    static final String OWNERS_KEY = CONFIG_PREFIX + "owners";
 
     static final ResourcePatternFilter ANY_RESOURCE = new ResourcePatternFilter(ResourceType.ANY, null, PatternType.ANY);
     static final AccessControlEntryFilter ANY_ENTRY = new AccessControlEntryFilter(null, null, AclOperation.ANY, AclPermissionType.ANY);
@@ -132,6 +135,7 @@ public class CustomAclAuthorizer implements Authorizer {
 
     final Map<String, List<String>> allowedAcls = new HashMap<>();
     final Set<String> aclPrincipals = new HashSet<>();
+    final Set<String> ownerPrincipals = new HashSet<>();
 
     /**
      * For backward-compatibility with {@link GlobalAclAuthorizer}.
@@ -185,6 +189,13 @@ public class CustomAclAuthorizer implements Authorizer {
             } catch (JsonProcessingException e) {
                 throw new IllegalArgumentException(RESOURCE_OPERATIONS_KEY, e);
             }
+        }
+
+        if (configs.containsKey(OWNERS_KEY)) {
+            String commaSeparatedOwners = String.valueOf(configs.get(OWNERS_KEY));
+            List<String> split = List.of(commaSeparatedOwners.split(","));
+            List<String> principals = split.stream().map(s -> CustomAclBinding.USER_TYPE_PREFIX + s).collect(toList());
+            ownerPrincipals.addAll(principals);
         }
 
         log.info("Allowed Custom Group Authorizer Listeners {}", this.allowedListeners);
@@ -297,7 +308,7 @@ public class CustomAclAuthorizer implements Authorizer {
     public List<AuthorizationResult> authorize(AuthorizableRequestContext requestContext, List<Action> actions) {
         return actions.stream()
             .map(action -> authorizeAction(requestContext, action))
-            .collect(Collectors.toList());
+            .collect(toList());
     }
 
     private AuthorizationResult authorizeAction(AuthorizableRequestContext requestContext, Action action) {
@@ -391,6 +402,10 @@ public class CustomAclAuthorizer implements Authorizer {
         return aclPrincipals.contains(principalName);
     }
 
+    boolean hasOwnerBindings(String principalName) {
+        return ownerPrincipals.contains(principalName);
+    }
+
     static String toString(KafkaPrincipal principal) {
         return principal.getPrincipalType() + ":" + principal.getName();
     }
@@ -430,6 +445,11 @@ public class CustomAclAuthorizer implements Authorizer {
                             requestContext.principal().getName(),
                             bindingPrincipal);
                     result = errorResult(AclCreateResult::new, format(INVALID_ACL_PRINCIPAL_NON_USER_PREFIXED_TEMPLATE, bindingPrincipal));
+                } else if (hasOwnerBindings(bindingPrincipal)) {
+                    log.info("Rejected attempt by user {} to create ACL binding for owner principal {}",
+                            requestContext.principal().getName(),
+                            bindingPrincipal);
+                    result = errorResult(AclCreateResult::new, format(INVALID_ACL_PRINCIPAL_OWNER_TEMPLATE, bindingPrincipal));
                 } else if (hasPrincipalBindings(bindingPrincipal)) {
                     /* Reject ACL operations as invalid where the principal named in the ACL binding is a restricted principal with configured custom ACLs */
                     log.info("Rejected attempt by user {} to create ACL binding for restricted principal {}",
@@ -449,7 +469,7 @@ public class CustomAclAuthorizer implements Authorizer {
 
                 return result;
             })
-            .collect(Collectors.toList());
+            .collect(toList());
     }
 
     @Override

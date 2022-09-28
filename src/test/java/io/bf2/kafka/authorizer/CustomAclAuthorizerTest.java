@@ -206,7 +206,8 @@ class CustomAclAuthorizerTest {
     @ParameterizedTest
     @CsvSource({
         "Denied for principal missing 'User:' prefix, user2,ACL rules including principal 'user2' are prohibited - principal is not type User",
-        "Denied for principal in static configuration, User:anonymous, ACL rules including principal 'User:anonymous' are prohibited - this principal is restricted"
+        "Denied for principal in static configuration, User:anonymous, ACL rules including principal 'User:anonymous' are prohibited - this principal is restricted",
+        "Denied for owner principal, User:alice, ACL rules including principal 'User:alice' are prohibited - this principal is an owner"
     })
     void testCreateAclsDeniedForInvalidPrincipal(String title, String principal, String error) throws IOException {
         AclBinding binding1 = new AclBinding(
