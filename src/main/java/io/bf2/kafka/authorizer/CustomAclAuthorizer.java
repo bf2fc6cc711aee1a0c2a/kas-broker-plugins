@@ -47,6 +47,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static java.lang.String.format;
+
 /**
  * A authorizer for Kafka that defines custom ACLs. The configuration is provided as
  * a string a semicolon-delimited key/value pairs to specify
@@ -101,7 +103,8 @@ public class CustomAclAuthorizer implements Authorizer {
     private static final int CREATE_PARTITIONS_APIKEY = 37;
     private static final Logger log = LoggerFactory.getLogger(CustomAclAuthorizer.class);
 
-    static final String CREATE_ACL_INVALID_PRINCIPAL = "Invalid ACL principal name";
+    static final String INVALID_ACL_PRINCIPAL_RESTRICTED_TEMPLATE = "ACL rules including principal '%s' are prohibited - this principal is restricted";
+    static final String INVALID_ACL_PRINCIPAL_NON_USER_PREFIXED_TEMPLATE = "ACL rules including principal '%s' are prohibited - principal is not type User";
     static final String CREATE_ACL_INVALID_BINDING = "Invalid ACL resource or operation";
 
     static final String CONFIG_PREFIX = Config.PREFIX + "authorizer.";
@@ -421,28 +424,23 @@ public class CustomAclAuthorizer implements Authorizer {
             .map(binding -> {
                 final CompletionStage<AclCreateResult> result;
 
-                if (!binding.entry().principal().startsWith(CustomAclBinding.USER_TYPE_PREFIX)) {
-                    /* Reject ACL operations as invalid where the principal named in the ACL binding is the principal performing the operation */
-                    log.info("Rejected attempt by user {} to create ACL binding with invalid principal name: {}",
+                String bindingPrincipal = binding.entry().principal();
+                if (!bindingPrincipal.startsWith(CustomAclBinding.USER_TYPE_PREFIX)) {
+                    log.info("Rejected attempt by user {} to create ACL binding with incorrect prefixing: {}",
                             requestContext.principal().getName(),
-                            binding.entry().principal());
-                    result = errorResult(AclCreateResult::new, CREATE_ACL_INVALID_PRINCIPAL);
-                } else if (Objects.equals(toString(requestContext.principal()), binding.entry().principal())) {
-                    /* Reject ACL operations as invalid where the principal named in the ACL binding is the principal performing the operation */
-                    log.info("Rejected attempt by user {} to self-assign ACL binding",
-                            requestContext.principal().getName());
-                    result = errorResult(AclCreateResult::new, CREATE_ACL_INVALID_PRINCIPAL);
-                } else if (hasPrincipalBindings(binding.entry().principal())) {
-                    /* Reject ACL operations as invalid where the principal named in the ACL binding is a principal with configured custom ACLs */
-                    log.info("Rejected attempt by user {} to create ACL binding for principal {} with existing custom ACL configuration",
+                            bindingPrincipal);
+                    result = errorResult(AclCreateResult::new, format(INVALID_ACL_PRINCIPAL_NON_USER_PREFIXED_TEMPLATE, bindingPrincipal));
+                } else if (hasPrincipalBindings(bindingPrincipal)) {
+                    /* Reject ACL operations as invalid where the principal named in the ACL binding is a restricted principal with configured custom ACLs */
+                    log.info("Rejected attempt by user {} to create ACL binding for restricted principal {}",
                             requestContext.principal().getName(),
-                            binding.entry().principal());
-                    result = errorResult(AclCreateResult::new, CREATE_ACL_INVALID_PRINCIPAL);
+                            bindingPrincipal);
+                    result = errorResult(AclCreateResult::new, format(INVALID_ACL_PRINCIPAL_RESTRICTED_TEMPLATE, bindingPrincipal));
                 } else if (!isAclBindingAllowed(binding)) {
                     /* Request to create an ACL that is not explicitly allowed */
                     log.info("Rejected attempt by user {} to create ACL binding for principal {} with existing custom ACL configuration",
                             requestContext.principal().getName(),
-                            binding.entry().principal());
+                            bindingPrincipal);
                     result = errorResult(AclCreateResult::new, CREATE_ACL_INVALID_BINDING);
                 } else {
                     log.debug("Delegating createAcls to parent");
