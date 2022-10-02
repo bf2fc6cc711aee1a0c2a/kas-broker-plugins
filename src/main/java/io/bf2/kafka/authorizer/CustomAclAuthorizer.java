@@ -227,6 +227,7 @@ public class CustomAclAuthorizer implements Authorizer {
         }
 
         configureDefaults(defaultBindings);
+        deleteOrphanBindingsFromDelegate();
     }
 
     /**
@@ -243,6 +244,66 @@ public class CustomAclAuthorizer implements Authorizer {
             CustomAclBinding.splitOnComma((String) propertyValue)
                 .stream()
                 .forEach(listener -> allowedListeners.add(listener.trim()));
+        }
+    }
+
+    /**
+     * To avoid misleading users we delete principals that are explicitly targeted by CustomAclAuthorizer rules.
+     * It is possible for a user with ACL rules in Kafka's Control Plane to become a user managed by CustomAclAuthorizer,
+     * in which case we would never use or update rules for them from the Kafka Control Plane. The old rules remain,
+     * dangling, in Kafka's Control Plane and visible through kafka ACL tooling. This would mislead users because there
+     * will be a mismatch between what the rules in Kafka's Control Plane say they should be permitted to do and the truth.
+     */
+    private void deleteOrphanBindingsFromDelegate() {
+        List<AclBindingFilter> toDelete = aclPrincipals.stream().map(aclPrincipal -> {
+            AccessControlEntryFilter principalFilter = new AccessControlEntryFilter(aclPrincipal, null, AclOperation.ANY, AclPermissionType.ANY);
+            return new AclBindingFilter(ResourcePatternFilter.ANY, principalFilter);
+        }).collect(Collectors.toList());
+        if (!toDelete.isEmpty()) {
+            log.info("Orphan deletion: deleting orphaned bindings if present, using filter: {}", toDelete);
+            List<CompletableFuture<AclDeleteResult>> deletionResults = delegate.deleteAcls(null, toDelete)
+                    .stream().map(CustomAclAuthorizer::getAclDeleteResultCompletableFuture).collect(Collectors.toList());
+            CompletableFuture<Void> future = CompletableFuture.allOf(deletionResults.toArray(CompletableFuture[]::new));
+            future.whenComplete((unused, throwable) -> {
+                if (throwable == null) {
+                    log.info("Orphan deletion: deleting orphaned bindings completed successfully");
+                } else {
+                    log.error("Orphan deletion: deleting orphaned bindings completed exceptionally", throwable);
+                }
+            });
+        } else {
+            log.warn("Orphan deletion: no managed principals - skipping orphan binding deletion");
+        }
+    }
+
+    private static CompletableFuture<AclDeleteResult> getAclDeleteResultCompletableFuture(CompletionStage<AclDeleteResult> completionStage) {
+        return completionStage.toCompletableFuture().whenComplete((aclDeleteResult, ex) -> {
+            if (ex != null) {
+                log.error("Orphan deletion: An ACL deletion future completed exceptionally", ex);
+            } else if (aclDeleteResult != null) {
+                logAclDeleteResult(aclDeleteResult);
+            } else {
+                log.warn("Orphan deletion: ACL delete result future completed with null exception and result");
+            }
+        });
+    }
+
+    private static void logAclDeleteResult(AclDeleteResult aclDeleteResult) {
+        Optional<ApiException> filterException = aclDeleteResult.exception();
+        if (filterException.isPresent()) {
+            log.error("Orphan deletion: An ACL delete result failed to match ACL filter to delete ACLs", filterException.get());
+        } else if (aclDeleteResult.aclBindingDeleteResults() != null) {
+            for (AclDeleteResult.AclBindingDeleteResult deleteResult : aclDeleteResult.aclBindingDeleteResults()) {
+                AclBinding binding = deleteResult.aclBinding();
+                Optional<ApiException> exception = deleteResult.exception();
+                if (exception.isPresent()) {
+                    log.error("Orphan deletion: Deletion failed for binding {}", binding, exception.get());
+                } else {
+                    log.info("Orphan deletion: Deletion succeeded for binding {}", binding);
+                }
+            }
+        } else {
+            log.warn("Orphan deletion: ACL delete result had no exception and null results");
         }
     }
 
