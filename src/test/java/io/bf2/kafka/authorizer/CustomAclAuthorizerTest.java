@@ -3,17 +3,21 @@ package io.bf2.kafka.authorizer;
 import io.bf2.kafka.common.Config;
 import io.bf2.kafka.common.PartitionCounter;
 import org.apache.kafka.common.acl.AccessControlEntry;
+import org.apache.kafka.common.acl.AccessControlEntryFilter;
 import org.apache.kafka.common.acl.AclBinding;
 import org.apache.kafka.common.acl.AclBindingFilter;
 import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.acl.AclPermissionType;
+import org.apache.kafka.common.errors.ApiException;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.resource.ResourcePattern;
+import org.apache.kafka.common.resource.ResourcePatternFilter;
 import org.apache.kafka.common.resource.ResourceType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.SecurityUtils;
 import org.apache.kafka.server.authorizer.AclCreateResult;
+import org.apache.kafka.server.authorizer.AclDeleteResult;
 import org.apache.kafka.server.authorizer.Action;
 import org.apache.kafka.server.authorizer.AuthorizableRequestContext;
 import org.apache.kafka.server.authorizer.AuthorizationResult;
@@ -27,6 +31,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -40,14 +45,19 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import static java.util.concurrent.CompletableFuture.completedFuture;
+import static java.util.concurrent.CompletableFuture.failedFuture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class CustomAclAuthorizerTest {
@@ -221,7 +231,7 @@ class CustomAclAuthorizerTest {
 
     @Test
     void testCreateAclsAllowedWhenPrincipalGivesThemselvesACLRules() throws IOException {
-        CompletableFuture<AclCreateResult> successFuture = CompletableFuture.completedFuture(new AclCreateResult(null));
+        CompletableFuture<AclCreateResult> successFuture = completedFuture(new AclCreateResult(null));
         doReturn(List.of(successFuture)).when(delegate).createAcls(any(), anyList());
 
         AclBinding binding = new AclBinding(
@@ -243,6 +253,64 @@ class CustomAclAuthorizerTest {
                 new AccessControlEntry("User:user1", "*", AclOperation.DESCRIBE, AclPermissionType.ALLOW));
         var bindings = List.of(readUser1Topics, writeUser1Topics, describleAllDelegationTokens);
         createAclsAndExpect("owner1", bindings, (aclCreateResult) -> isFailedWithError(aclCreateResult, CustomAclAuthorizer.CREATE_ACL_INVALID_BINDING), 3);
+    }
+
+    @Test
+    void testDeleteAllBindingsForPrincipalsWithStaticRulesFromDelegateOnConfigure() throws Exception {
+        String aliceTopicBinding = "permission=allow;topic=baa;operations=describe;principal=alice";
+        String bobTopicBinding = "permission=allow;topic=baa;operations=describe;principal=bob";
+        Map<String, String> config = Map.of("kas.authorizer.acl.1", aliceTopicBinding, "kas.authorizer.acl.2", bobTopicBinding);
+        whenAuthorizerConstructedAndConfigured(config);
+        verify(delegate).deleteAcls(any(), eq(List.of(principalFilter("User:alice"), principalFilter("User:bob"))));
+    }
+
+    @Test
+    void testOrphanedPrincipalsDeletionToleratesZeroManagedPrincipals() throws Exception {
+        Map<String, String> emptyMap = Map.of();
+        whenAuthorizerConstructedAndConfigured(emptyMap);
+        verify(delegate, never()).deleteAcls(any(), anyList());
+    }
+
+    @Test
+    void testOrphanedPrincipalDeletionFailuredFutureDoesNotAffectConfiguration() throws Exception {
+        testConfigurationOfPluginNotBlockedWhenOrphanDeletionFutureIs(failedFuture(new RuntimeException("boom")));
+    }
+
+    @Test
+    void testOrphanedPrincipalDeletionFutureCompletedWithNullDoesNotAffectConfiguration() throws Exception {
+        testConfigurationOfPluginNotBlockedWhenOrphanDeletionFutureIs(completedFuture(null));
+    }
+
+    @Test
+    void testOrphanedPrincipalDeletionResultWithExceptionDoesNotAffectConfiguration() throws Exception {
+        AclDeleteResult resultWithException = new AclDeleteResult(new ApiException());
+        testConfigurationOfPluginNotBlockedWhenOrphanDeletionFutureIs(completedFuture(resultWithException));
+    }
+
+    @Test
+    void testOrphanedPrincipalDeletionResultWithNullResultsDoesNotAffectConfiguration() throws Exception {
+        AclDeleteResult nullResults = new AclDeleteResult((Collection<AclDeleteResult.AclBindingDeleteResult>) null);
+        testConfigurationOfPluginNotBlockedWhenOrphanDeletionFutureIs(completedFuture(nullResults));
+    }
+
+    @Test
+    void testOrphanedPrincipalDeletionResultWithSubExceptionDoesNotAffectConfiguration() throws Exception {
+        ResourcePattern pattern = new ResourcePattern(ResourceType.TOPIC, "baa", PatternType.LITERAL);
+        AccessControlEntry controlEntry = new AccessControlEntry("principal", "host", AclOperation.ALL, AclPermissionType.DENY);
+        AclBinding binding = new AclBinding(pattern, controlEntry);
+        AclDeleteResult.AclBindingDeleteResult bindingDeleteResult = new AclDeleteResult.AclBindingDeleteResult(binding, new ApiException());
+        AclDeleteResult resultWithException = new AclDeleteResult(List.of(bindingDeleteResult));
+        testConfigurationOfPluginNotBlockedWhenOrphanDeletionFutureIs(completedFuture(resultWithException));
+    }
+
+    @Test
+    void testOrphanedPrincipalWithSuccessefulDeletionResultDoesNotAffectConfiguration() throws Exception {
+        ResourcePattern pattern = new ResourcePattern(ResourceType.TOPIC, "baa", PatternType.LITERAL);
+        AccessControlEntry controlEntry = new AccessControlEntry("principal", "host", AclOperation.ALL, AclPermissionType.DENY);
+        AclBinding binding = new AclBinding(pattern, controlEntry);
+        AclDeleteResult.AclBindingDeleteResult bindingDeleteResult = new AclDeleteResult.AclBindingDeleteResult(binding);
+        AclDeleteResult successfulDeleteResult = new AclDeleteResult(List.of(bindingDeleteResult));
+        testConfigurationOfPluginNotBlockedWhenOrphanDeletionFutureIs(completedFuture(successfulDeleteResult));
     }
 
     @ParameterizedTest
@@ -279,6 +347,24 @@ class CustomAclAuthorizerTest {
     }
 
 
+    private void whenAuthorizerConstructedAndConfigured(Map<String, String> configuration) throws InterruptedException, ExecutionException, TimeoutException, IOException {
+        PartitionCounter partitionCounter = generateMockPartitionCounter(1001, false, false);
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate, partitionCounter)) {
+            auth.configure(configuration);
+        }
+    }
+
+    private void testConfigurationOfPluginNotBlockedWhenOrphanDeletionFutureIs(CompletableFuture<AclDeleteResult> future) throws InterruptedException, ExecutionException, TimeoutException, IOException {
+        doReturn(List.of(future)).when(delegate).deleteAcls(any(), anyList());
+        PartitionCounter partitionCounter = generateMockPartitionCounter(1001, false, false);
+        String aliceTopicBinding = "permission=allow;topic=baa;operations=describe;principal=alice";
+        Map<String, String> config = Map.of("kas.authorizer.acl.1", aliceTopicBinding);
+        try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate, partitionCounter)) {
+            auth.configure(config);
+            assertUserPrincipalAllowedToDescribeTopic(auth, "alice", "baa");
+        }
+    }
+
     private void createAclsAndExpect(String user, List<AclBinding> bindings, Predicate<AclCreateResult> allMatch, int expectedResults) throws IOException {
         try (CustomAclAuthorizer auth = new CustomAclAuthorizer(this.delegate)) {
             auth.configure(config);
@@ -310,6 +396,18 @@ class CustomAclAuthorizerTest {
         return aclCreateResult.exception().isPresent() && error.equals(aclCreateResult.exception().get().getMessage());
     }
 
+    private static AclBindingFilter principalFilter(String principal) {
+        AccessControlEntryFilter principalFilter = new AccessControlEntryFilter(principal, null, AclOperation.ANY, AclPermissionType.ANY);
+        return new AclBindingFilter(ResourcePatternFilter.ANY, principalFilter);
+    }
+
+    private static void assertUserPrincipalAllowedToDescribeTopic(CustomAclAuthorizer auth, String principal, String topic) {
+        AuthorizableRequestContext rc = createMockRequestContext("security-9095", KafkaPrincipal.USER_TYPE, principal, ApiKeys.DESCRIBE_CONFIGS.id);
+        Action action = new Action(AclOperation.DESCRIBE, new ResourcePattern(ResourceType.TOPIC, topic, PatternType.LITERAL), 0, true, true);
+        List<AuthorizationResult> results = auth.authorize(rc, Arrays.asList(action));
+        assertEquals(1, results.size());
+        assertEquals(AuthorizationResult.ALLOWED, results.get(0));
+    }
 
     private PartitionCounter generateMockPartitionCounter(int numPartitions, boolean response, boolean limitEnforced)
             throws InterruptedException, ExecutionException, TimeoutException {
