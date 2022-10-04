@@ -248,7 +248,7 @@ public class CustomAclAuthorizer implements Authorizer {
     }
 
     /**
-     * To avoid misleading users we delete principals that are explicitly targeted by CustomAclAuthorizer rules.
+     * To avoid misleading users we delete bindings for principals that are explicitly targeted by CustomAclAuthorizer rules.
      * It is possible for a user with ACL rules in Kafka's Control Plane to become a user managed by CustomAclAuthorizer,
      * in which case we would never use or update rules for them from the Kafka Control Plane. The old rules remain,
      * dangling, in Kafka's Control Plane and visible through kafka ACL tooling. This would mislead users because there
