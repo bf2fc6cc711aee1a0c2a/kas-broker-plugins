@@ -23,6 +23,7 @@ import org.apache.kafka.server.authorizer.AuthorizableRequestContext;
 import org.apache.kafka.server.authorizer.AuthorizationResult;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -52,6 +53,7 @@ import static java.util.concurrent.CompletableFuture.failedFuture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Named.named;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -288,16 +290,17 @@ class CustomAclAuthorizerTest {
     }
 
 
-    private static Stream<CompletableFuture<AclDeleteResult>> orphanDeletionResults() {
+    private static Stream<Named<CompletableFuture<AclDeleteResult>>> orphanDeletionResults() {
         CompletableFuture<AclDeleteResult> deleteResultException = completedFuture(new AclDeleteResult(new ApiException()));
         CompletableFuture<AclDeleteResult> nullAclBindingResults = completedFuture(new AclDeleteResult((Collection<AclDeleteResult.AclBindingDeleteResult>) null));
         return Stream.of(
-                failedFuture(new RuntimeException("boom")),
-                completedFuture(null),
-                deleteResultException,
-                nullAclBindingResults,
-                deleteBindingResultWithException(),
-                successfulBindingResult()
+                named("future completed exceptionally", failedFuture(new RuntimeException("boom"))),
+                named("future completed with null", completedFuture(null)),
+                named("delete result completed with exception", deleteResultException),
+                named("delete result completed with null binding results", nullAclBindingResults),
+                named("delete binding result completed with exception", deleteBindingResultWithException()),
+                named("delete binding result completed with null", nullBindingResult()),
+                named("future completed successfully", successfulBindingResult())
         );
     }
 
@@ -315,6 +318,12 @@ class CustomAclAuthorizerTest {
         AccessControlEntry controlEntry = new AccessControlEntry("principal", "host", AclOperation.ALL, AclPermissionType.DENY);
         AclBinding binding = new AclBinding(pattern, controlEntry);
         AclDeleteResult.AclBindingDeleteResult bindingDeleteResult = new AclDeleteResult.AclBindingDeleteResult(binding);
+        AclDeleteResult deleteResult = new AclDeleteResult(List.of(bindingDeleteResult));
+        return completedFuture(deleteResult);
+    }
+
+    private static CompletableFuture<AclDeleteResult> nullBindingResult() {
+        AclDeleteResult.AclBindingDeleteResult bindingDeleteResult = new AclDeleteResult.AclBindingDeleteResult(null);
         AclDeleteResult deleteResult = new AclDeleteResult(List.of(bindingDeleteResult));
         return completedFuture(deleteResult);
     }
